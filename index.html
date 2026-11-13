@@ -1,0 +1,1706 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Монетный сортер</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#232744">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:,">
+<style>
+/* Шрифт — свой файл (PROTO-BASE §1, §11): Nunito, OFL. */
+@font-face{font-family:"Nunito";src:url("assets/fonts/nunito-latin.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2212,U+00D7}
+@font-face{font-family:"Nunito";src:url("assets/fonts/nunito-cyr.woff2") format("woff2");font-weight:200 1000;font-display:swap;unicode-range:U+0400-045F,U+0490-0491,U+2116}
+/* Палитра — одно место; сцена и 2D-слой читают цвета через getComputedStyle (PROTO-BASE §9).
+   Мир тёмный и спокойный (глубокий индиго), сочные только монеты, бумага и сейф. Светлой темы нет — сцена задумана тёмной. */
+:root{
+  --bg0:#262b50; --bg1:#1c2040; --frame:#232744; --ink:#ffffff; --muted:#aeb3de; --card:#2e3466;
+  --accent:#ffc531; --amber:#ffb23e; --danger:#ff4d5e; --ok:#3ddc6f;
+  --track:#343a72; --track-edge:#474e93; --chev:#7c85d6; --board:#4b58d2; --board-edge:#323c9c; --well:#3b47b8; --well-edge:#6370e6;
+  --slot:#1d2143; --slot-edge:#5058a6; --shadow:#0c0e2c; --paper:#fff3da; --tie:#fff3da; --secret:#b3b9ea;
+  --veil:#141632; --bar:#3a4078; --bar-line:#ffc531; --pill:#161936; --ink-edge:#1b1640;
+  --frame-w:430px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#14162e;color:var(--ink);font:700 16px/1.3 "Nunito", system-ui, sans-serif;
+  overflow:hidden;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#frame{position:relative;width:min(100vw,var(--frame-w));height:100dvh;height:100svh;margin:0 auto;overflow:hidden;
+  background:linear-gradient(180deg,var(--bg0) 0%,var(--bg1) 100%)}
+#game{position:absolute;inset:0;touch-action:none}
+#game canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#fx{pointer-events:none}
+header{position:absolute;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 12px 0;pointer-events:none}
+header .pill{background:var(--pill);border-radius:999px;padding:7px 14px;font-size:15px;font-weight:900;letter-spacing:.2px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.08)}
+header .sp{flex:1}
+header button{pointer-events:auto;width:40px;height:40px;padding:0;border-radius:13px;background:var(--pill);box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);display:grid;place-items:center}
+header svg{width:20px;height:20px;fill:none;stroke:var(--ink);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+/* Нижняя панель бустеров — как в Hexa Glide: плашка с золотой кромкой, три круглые кнопки на ней, счётчик на каждой. */
+#bar{position:absolute;left:0;right:0;bottom:0;height:calc(58px + env(safe-area-inset-bottom));background:var(--bar);border-top:4px solid var(--bar-line);display:flex;justify-content:center;gap:22px;pointer-events:none}
+#bar button{pointer-events:auto;position:relative;top:-34px;width:72px;height:72px;padding:0;border-radius:50%;background:radial-gradient(circle at 50% 35%,#fff8e6 0%,#f3e2bd 70%,#dcc594 100%);box-shadow:0 0 0 4px #b98a2c,0 5px 0 4px rgba(0,0,0,.25);display:grid;place-items:center}
+#bar button:active{transform:translateY(3px)}
+#bar img{width:52px;height:52px;object-fit:contain;pointer-events:none}
+#bar i{position:absolute;right:-6px;bottom:-4px;min-width:26px;height:26px;border-radius:13px;background:#2f8cf0;box-shadow:0 0 0 3px #fff;font:900 15px/26px "Nunito",sans-serif;font-style:normal;text-align:center;color:#fff}
+#bar.hide{display:none}
+button{font:inherit;font-weight:900;color:var(--ink);background:#4a5199;border:0;border-radius:16px;padding:12px 20px;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.28)}
+button:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.28)}
+button.primary{background:linear-gradient(180deg,#ffd75a,#ffb21f);color:#4a2c00;box-shadow:0 4px 0 #b97a12}
+#overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,22,50,.86);padding:20px}
+#overlay.show{display:flex}
+.card{background:var(--card);border-radius:22px;padding:22px;max-width:350px;width:100%;text-align:center;animation:pop .18s ease-out} /* с видимого состояния, не с opacity:0 (§9) */
+@keyframes pop{from{transform:scale(.96)}to{transform:scale(1)}}
+.card h2{margin:0 0 6px;font-weight:900;font-size:26px} .card p{color:var(--muted);margin:0 0 16px;font-weight:600}
+.levels{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:16px 0 8px}
+.levels button{padding:10px 0;font-size:15px} .levels button.locked{opacity:.4} .levels button.done{box-shadow:inset 0 -3px 0 var(--accent)}
+.cheat{margin-top:12px;font-size:12px;padding:6px 10px;background:transparent;border:1.5px dashed var(--muted);color:var(--muted);box-shadow:none;font-weight:700}
+/* Карточка конца уровня — внизу, сейф и прилавок не закрывает. */
+#end{position:absolute;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));background:var(--card);border-radius:22px;padding:18px;text-align:center;animation:pop .18s ease-out;box-shadow:0 0 0 3px rgba(255,255,255,.08),0 10px 30px rgba(0,0,0,.4)}
+#end.hide{display:none}
+#end h2{margin:0 0 2px;font-size:22px;font-weight:900} #end p{margin:0 0 12px;color:var(--muted);font-weight:600}
+#end .row{display:flex;gap:8px;justify-content:center}
+#end .reward{display:flex;align-items:center;justify-content:center;gap:8px;margin:-4px 0 12px;font-size:30px;color:var(--accent);text-shadow:0 2px 0 rgba(0,0,0,.35)}
+#end .reward img{width:44px;height:44px;animation:bob .7s ease-in-out infinite alternate}
+@keyframes bob{from{transform:translateY(0) rotate(-4deg)}to{transform:translateY(-5px) rotate(4deg)}}
+#revive{position:absolute;transform:translate(-50%,-50%);padding:9px 14px;font-size:14px;box-shadow:0 0 0 4px rgba(255,178,62,.25);font-weight:900;border-radius:999px;background:var(--amber);color:#2a1c00;white-space:nowrap}
+#revive.hide{display:none}
+#revive small{font-weight:800;opacity:.7;margin-left:4px}
+#toast{position:absolute;left:50%;top:calc(58px + env(safe-area-inset-top));transform:translateX(-50%);background:rgba(12,14,42,.92);padding:8px 14px;border-radius:12px;
+  pointer-events:none;opacity:.98;transition:opacity .25s;font-size:14px;white-space:nowrap}
+#toast.hide{opacity:0}
+@media (prefers-reduced-motion: reduce){ .card,#end{animation:none} #toast{transition:none} }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="game"><canvas id="gl"></canvas><canvas id="fx"></canvas></div>
+  <header>
+    <span class="pill" id="hud-level">Уровень 1</span><span class="sp"></span>
+    <button id="btn-reset" aria-label="заново"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v5h5"/></svg></button>
+    <button id="btn-menu" aria-label="меню"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
+  </header>
+  <div id="bar">
+    <button data-act="boost" data-b="shuffle"><img src="assets/ui/b-shuffle.png" alt=""><i>3</i></button>
+    <button data-act="boost" data-b="hand"><img src="assets/ui/b-hand.png" alt=""><i>3</i></button>
+    <button data-act="boost" data-b="wild"><img src="assets/ui/b-wild.png" alt=""><i>3</i></button>
+  </div>
+  <button id="revive" class="hide" data-act="revive">+1 место<small>AD</small></button>
+  <div id="end" class="hide"></div>
+  <div id="overlay"><div class="card" id="card"></div></div>
+  <div id="toast" class="hide"></div>
+</div>
+<script src="vendor/three.js"></script>
+<script>
+'use strict';
+/* ЯДРО */
+// ---------------------------------------------------------------------------
+// «Монетный сортер» — рескин Hexa Glide (режим HexaFlow). Правила — ДОСЛОВНО ядро веб-порта
+// ~/Claude/Projects/hexaglide-web (порт HexaFlowSystem.cs); переименования только в оболочке:
+//   центр-стопка   → столбик монет в лотке; её слои → полосы монет одного металла (снизу вверх);
+//   слой «добит»   → в полосе CFG.maxCenter монет: их заворачивают в бумажный ролл, ролл улетает в сейф;
+//   цвет фишки     → металл (золото, серебро, медь, эмали); стопка очереди → кошелёк (count — сколько в нём монет);
+//   лента          → край вращающегося диска сортера (до maxOnConveyor кошельков сразу);
+//   парковка       → прилавок на maxSlots мест, затор = проигрыш; секретная стопка → закрытый кошелёк «?»;
+//   связка         → кошельки на резинке (выходят только вместе).
+// Блок между метками HEXAGLIDE переносит и сверяет tools/import-core.mjs — руками не править.
+// ---------------------------------------------------------------------------
+const CFG = {
+  // --- правила (порт констант HexaFlowSystem; это Hexa Glide, менять только с Андреем) ---
+  maxCenter: 10,          // MaxCenter: монет в полосе до ролла
+  maxSlots: 5,            // MaxSlots: мест на прилавке; не хватило места — проигрыш
+  maxOnConveyor: 5,       // MaxOnConveyor: кошельков на диске одновременно
+  queueRows: 3,           // QueueRows: сколько рядов очереди видно
+  stepInterval: 8 / 30,   // StepInterval, с: тик диска (~8 с на круг из 30 клеток)
+  queueEmptySpeedMul: 2,  // QueueEmptySpeedMul: ×2, когда очередь и прилавок пусты (сортер раскручивается)
+  jumpTime: 0.15,         // JumpTime, с: прыжок кошелька на диск. В игре 0,42; сокращён ради отклика («первая монета ≤ 150 мс после тапа»)
+  chipSeg: 0.18,          // ChipMovingTime, с: один гекс пути монеты (время полёта = клетки × chipSeg — как в игре)
+  chipRollLead: 0.45,     // ChipRollLead: доля тика, которую кошелёк едет до вылета монеты
+
+  // --- металлы: вид = номер в списке. coin/pouch — цвета монеты и кошелька, emblem — знак на аверсе (не только цвет),
+  //     sound — «косточка» звона (assets/sfx.js), value — цена монеты в счёте сейфа, enamel — гладкая эмаль без насечки ---
+  metals: [
+    { id: 'gold',   name: 'золото',  coin: '#ffc62e', pouch: '#f7a516', emblem: 'star',    sound: 'gold',   value: 5 },
+    { id: 'silver', name: 'серебро', coin: '#e6eefb', pouch: '#b4c4ea', emblem: 'moon',    sound: 'silver', value: 2 },
+    { id: 'copper', name: 'медь',    coin: '#f47d42', pouch: '#e8672f', emblem: 'leaf',    sound: 'copper', value: 1 },
+    { id: 'ruby',   name: 'рубин',   coin: '#f6456f', pouch: '#ee3a68', emblem: 'heart',   sound: 'glass',  value: 3, enamel: 1 },
+    { id: 'azure',  name: 'лазурь',  coin: '#2cc8f7', pouch: '#14a9e0', emblem: 'drop',    sound: 'glass',  value: 3, enamel: 1 },
+    { id: 'mint',   name: 'мята',    coin: '#2fdc9f', pouch: '#14c08c', emblem: 'diamond', sound: 'glass',  value: 3, enamel: 1 },
+  ],
+
+  // --- мир (единицы: радиус гекса = 1, соседние столбики на √3) ---
+  camPitchDeg: 50,        // наклон ортокамеры — как LevelCameras в игре
+  camPad: 1.03,           // запас кадрирования
+  coinR: 0.81,            // радиус монеты (между соседними столбиками остаётся ~0,11)
+  coinH: 0.18,            // толщина монеты: полоса из 10 = 1,8
+  coinBevel: 0.035,       // фаска
+  coinSeg: 28,            // сегментов по кругу
+  // раскладка — как в Hexa Glide: поле во всю ширину, лента вплотную к нему, под ней прилавок и очередь
+  boardAp: 7.0,           // лоток: апофема шестиугольника (до плоской стороны); клетки поля — до 6
+  trackAp: 8.5,           // лента: внешняя апофема (клетки ленты стоят на 7,5)
+  wellR: 0.9,             // радиус лунки
+  slotZ: 12.5,            // прилавок: линия мест
+  slotDX: 3.0,            //           шаг мест
+  slotR: 1.3,             //           радиус места
+  queueZ: 16.1,           // очередь: первый ряд
+  queueDX: 3.3,           //          шаг колонок
+  queueDZ: 3.25,          //          шаг рядов (третий ряд уходит под панель бустеров, как в игре)
+  walletR: 1.0,           // радиус полного кошелька на ленте
+  walletMin: 0.8,         // масштаб кошелька с одной монетой
+  walletFull: 12,         // монет в «полном» кошельке (масштаб 1)
+  ringScale: 0.95, slotScale: 1.12, queueScale: 1.34,               // кошелёк на ленте / на прилавке / в очереди (в Hexa Glide очередь тоже крупнее поля)
+  hudTopPx: 108,          // px: место сверху под цель (сейф и счёт роллов)
+  barPx: 62,              // px: панель бустеров снизу
+  topBias: 0.7,           // какую долю лишней высоты экрана отдать низу (поле прижимается к верхней панели)
+  safePx: 64,             // px: значок сейфа
+  safeDial: { x: 0.5933, y: 0.497, r: 0.2676 },   // диск замка на значке (доли размера; из assets/ui/safe.json)
+  maxCoins: 1400, maxPapers: 96, maxWallets: 30,                    // потолки инстансов
+  // Герои Tripo (assets/models/*.glb): посадка моделей. rx/ry — доворот, auto — выровнять коробку перебором, width — ширина в мире,
+  // top/mid — где у мешочка монета в горле и подпись (доли высоты). Сейф — 2D-значок assets/ui/safe.png (вырезан из листа GPT).
+  pouchOutline: 0.075,    // толщина тёмного контура мешка
+  numeralSize: 0.82,      // размер числа на верхней монете столбика (доля единицы мира)
+  models: {
+    use: false,           // модели Tripo для кошельков выключены: процедурный мешок читается лучше
+    pouch: { rx: 0, ry: 0, width: 2.0, top: 0.86, mid: 0.36, mapAmt: 0.3 },      // mapAmt — доля текстуры Tripo (остальное — ровный цвет металла)
+    purse: { rx: 0, ry: 0, width: 2.0, mapAmt: 0.85 },
+  },
+
+  // --- фил (стартовая спека Андрея; тюнить на телефоне) ---
+  tapSquashT: 0.06,       // с: кошелёк сжимается перед прыжком
+  tapSquash: 0.10,        // на сколько сжимается (до 90%)
+  jumpArc: 1.5,           // высота дуги прыжка на диск
+  popT: 0.16,             // с: монета выпрыгивает из кошелька на лоток
+  popArc: 0.55,           // высота этой дуги
+  hopT: 0.20,             // с: заход монеты на верх столбика
+  hopDist: 1.3,           // с какого расстояния начинается заход
+  hopArc: 0.55,           // высота дуги захода (плюс доля высоты столбика)
+  landTilt: 0.42,         // рад: наклон монеты в момент посадки — с него начинается «монета Эйлера»
+  settleT: 0.15,          // с: монета крутится и затихает на столбике
+  settleTurns: 1.3,       // оборотов прецессии за это время
+  sagAmt: 0.04,           // столбик проседает на 4% и пружинит
+  sagFreq: 42, sagDamp: 11,   // частота (рад/с) и затухание пружины столбика
+  glowHz: 1.6,            // пульс свечения верхней монеты у столбика 9/10
+  peekWrap: 0.24,         // какая доля окружности — обёртка, выглядывающая из-за столбика 9/10
+  peekH: 1.3,             // её высота относительно полосы из 10 монет
+  boosters: { shuffle: 3, hand: 3, wild: 3 },   // бустеры — пока заглушки: кнопки и счётчики есть, действия нет
+  paperR: 1.13,           // радиус обёртки относительно монеты
+  paperH: 1.22,           // высота ролла относительно полосы из 10 монет (запас на смятые концы)
+  hitStopMs: 50,          // хит-стоп на 10-й монете
+  hitStopScale: 0.02,     // скорость игровых часов в хит-стопе
+  wrapT: 0.25,            // с: обёртка закручивается, концы сминаются
+  rollPrepT: 0.07,        // с: ролл приседает перед прыжком
+  rollFlyT: 0.56,         // с: полёт ролла в сейф
+  rollArc: 4.6,           // высота дуги полёта
+  rollTurns: 1.25,        // оборотов кувырком за полёт
+  comboWindow: 1.2,       // с: окно серии роллов
+  revealFlashT: 0.28,     // с: вспышка открывшейся полосы
+  safeSquash: 0.22,       // значок сейфа подпрыгивает от удара ролла
+  parkT: 0.30,            // с: кошелёк с остатком перелетает на прилавок
+  parkArc: 1.7,           // высота этой дуги
+  queueShiftT: 0.20,      // с: очередь подтягивается
+  goneFlatT: 0.12,        // с: пустой кошелёк сплющивается
+  goneFlyT: 0.36,         // с: и улетает
+  tickEvery: 0.5,         // с: тиканье при полном прилавке
+  loseSlow: 0.45,         // замедление игровых часов в проигрыше
+  loseScatterMax: 26,     // сколько монет рассыпается
+  loseRollT: 1.5,         // с: последняя монета катится к краю
+  loseSpinT: 1.6,         // с: и крутится, затихая
+  winFocusT: 0.5,         // с: сейф выезжает в центр экрана
+  winFountain: 64,        // монет в фонтане из сейфа на победе
+  winFountainT: 1.2,      // с: сколько бьёт фонтан
+  winRain: 28,            // монет в «дожде» под карточкой победы
+  winCountT: 1.0,         // с: награда на карточке набегает от нуля
+  introDropT: 0.2,        // с: падение одной монеты в каскаде на старте уровня
+  introStep: 0.014,       // с: задержка между монетами каскада (плюс 0,07 на клетку от центра)
+  vibGapMs: 60,           // тик вибрации на монету — не чаще
+  vib: { coin: 6, roll: 16, safe: 28, hole: 12, park: 14, slam: [50, 30, 80], lose: [30, 40, 70] },
+  sfx: { master: 0.9, room: 0.16, maxVoices: 8, pitchJitter: 0.006, timbreJitter: 0.05, rollGain: 0.045 },
+  tapMinPx: 30,           // px: минимальный радиус попадания по кошельку
+  tapSlop: 10,            // px: порог тап/драг
+  toastMs: 1500,
+  logCoins: true,         // писать в журнал посадку каждой монеты
+};
+
+// Уровни — выгрузка основной линии Hexa Glide (hexaglide-web/levels.js), поле n — имя в игре.
+// c — столбики [q, r, цвет, amount, цвет, amount…] (полосы снизу вверх, amount — сколько монет уже лежит);
+// q — колонки очереди [[цвет, count, связка?, секрет?]…]; fr/rr — радиусы поля и диска;
+// m — наше: какой металл у цвета по порядку его появления в уровне (номера CFG.metals).
+const LEVELS = [
+  {"n":"HexaFlow_Level_1","m":[0,1],"d":0,"fr":4,"rr":5,"c":[[-2,0,26,1],[-2,1,26,1],[-2,2,26,1],[-1,-1,26,1],[-1,0,26,1],[-1,1,26,1],[-1,2,26,1],[0,-2,31,1],[0,-1,31,1],[0,1,26,1],[0,2,26,1],[1,-2,31,1],[1,-1,31,1],[1,0,31,1],[1,1,31,1],[2,-2,31,1],[2,-1,31,1],[2,0,31,1]],"q":[[[26,6],[26,6],[26,6],[31,9],[26,9],[31,10],[31,9],[26,9],[26,10],[26,11]],[[31,7],[31,7],[31,7],[26,8],[31,9],[26,9],[31,7],[31,7],[31,9],[26,7]]]},
+  {"n":"HexaFlow_Level_2","m":[2,0],"d":0,"fr":4,"rr":5,"c":[[-3,0,3,1],[-3,1,3,1],[-3,2,3,1],[-3,3,3,1],[-2,-1,3,1],[-2,0,5,1],[-2,1,5,1],[-2,2,5,1],[-2,3,3,1],[-1,-2,3,1],[-1,-1,5,1],[-1,0,5,1],[-1,1,3,1],[-1,2,5,1],[-1,3,3,1],[0,-3,3,1],[0,-2,5,1],[0,-1,3,1],[0,0,5,1],[0,1,3,1],[0,2,5,1],[0,3,3,1],[1,-3,3,1],[1,-2,5,1],[1,-1,3,1],[1,0,5,1],[1,1,5,1],[1,2,3,1],[2,-3,3,1],[2,-2,5,1],[2,-1,5,1],[2,0,5,1],[2,1,3,1],[3,-3,3,1],[3,-2,3,1],[3,-1,3,1],[3,0,3,1]],"q":[[[3,7],[3,9],[3,7],[5,7],[3,8],[3,8],[3,8],[3,9],[5,8],[5,8],[3,7],[3,7],[3,9],[5,7],[3,8],[5,7],[5,7],[3,9],[5,8],[3,9],[5,8]],[[5,7],[5,8],[3,7],[3,7],[3,8],[3,7],[5,8],[3,9],[5,9],[3,9],[5,9],[5,9],[3,7],[5,9],[5,8],[3,8],[5,8],[3,8],[3,7],[3,8],[3,8]]]},
+  {"n":"HexaFlow_Level_3","m":[1,0,2],"d":1,"fr":4,"rr":5,"c":[[-3,0,0,1,5,9],[-2,-1,0,1,5,9],[-2,0,0,1,5,9],[-2,1,0,1,5,9],[-1,-2,0,1,5,9],[-1,-1,0,1,5,9],[-1,0,0,1,5,9],[-1,1,0,1,5,9],[-1,2,0,1,5,9],[0,-3,13,2],[0,-2,0,1,5,9],[0,-1,0,1,5,9],[0,0,0,1,5,9],[0,1,0,1,5,9],[0,2,0,1,5,9],[0,3,0,1,5,9],[1,-3,0,1,5,9],[1,-2,0,1,5,9],[1,-1,0,1,5,9],[1,0,0,1,5,9],[1,1,0,1,5,9],[2,-3,0,1,5,9],[2,-2,0,1,5,9],[2,-1,0,1,5,9],[3,-3,0,1,5,9]],"q":[[[5,7],[0,7],[5,8],[0,9],[0,9],[0,9],[0,9],[0,9],[0,9],[0,7]],[[13,8],[0,9],[0,8],[0,8],[0,8],[0,8],[0,8],[0,7],[0,9],[0,8]],[[0,8],[0,7],[5,9],[0,8],[0,9],[0,7],[0,9],[0,9],[0,9],[0,9]]]},
+  {"n":"HexaFlow_Level_6","m":[0,3,1],"d":0,"fr":4,"rr":5,"c":[[0,0,6,5],[0,-1,7,4,4,5],[1,-1,7,4,4,5],[1,0,7,4,4,5],[0,1,7,4,4,5],[-1,1,7,4,4,5],[-1,0,7,4,4,5],[0,-2,4,4,6,5],[1,-2,4,4,6,5],[2,-2,4,4,6,5],[2,-1,4,4,6,5],[2,0,4,4,6,5],[1,1,4,4,6,5],[0,2,4,4,6,5],[-1,2,4,4,6,5],[-2,2,4,4,6,5],[-2,1,4,4,6,5],[-2,0,4,4,6,5],[-1,-1,4,4,6,5],[0,-3,6,4,7,5],[3,-3,6,4,7,5],[3,0,6,4,7,5],[0,3,6,4,7,5],[-3,3,6,4,7,5],[-3,0,6,4,7,5]],"q":[[[7,7],[7,7],[6,8],[7,8],[7,7],[6,7],[7,8],[7,7],[7,6],[6,6],[6,9]],[[6,8],[6,8],[7,9],[4,8],[4,8],[4,7],[6,8],[6,7],[4,8],[4,7],[6,8],[4,9]],[[4,7],[4,9],[6,9],[6,7],[4,7],[7,7],[6,7],[4,8],[4,9],[4,7],[6,9],[4,8]]]},
+  {"n":"HexaFlow_Level_7_HM","m":[0,4,1],"d":0,"fr":4,"rr":5,"c":[[-3,0,51,4,49,5],[-3,1,51,4,49,5],[-3,2,55,4,51,5],[-3,3,51,4],[-2,-1,51,4,49,5],[-2,3,51,4],[-1,-2,51,4,49,5],[-1,3,51,4],[0,-3,49,4],[0,3,51,4],[1,-3,49,4],[1,2,51,4],[2,-3,55,4],[2,1,55,4],[3,-3,55,4],[3,-2,55,4],[3,-1,55,4],[3,0,55,4],[-2,0,51,4],[-2,1,51,4],[-2,2,55,4],[-1,-1,51,4],[-1,2,55,4],[0,-2,51,4],[0,2,55,4],[1,-2,51,4],[1,1,55,4],[2,-2,49,4],[2,-1,49,4],[2,0,49,4],[-1,0,55,4],[-1,1,49,4],[0,-1,55,4],[0,1,49,4],[1,-1,51,4],[1,0,51,4],[0,0,55,4]],"q":[[[51,11],[51,11,0,1],[51,11,0,1],[51,9],[51,13],[51,11],[51,11],[51,11],[51,13]],[[49,9],[49,9,0,1],[49,13,0,1],[49,13],[49,13],[49,5],[55,13],[55,9],[55,13],[55,9],[55,11],[55,13],[55,10],[55,6]]]},
+  {"n":"HexaFlow_Level_8_HM","m":[2,0,5],"d":0,"fr":4,"rr":5,"c":[[-3,1,52,4,49,5],[-3,2,52,4,49,5],[-2,-1,49,4,55,5],[-2,3,49,4,55,5],[-1,-2,55,4,52,5],[-1,3,55,4,52,5],[1,-3,49,4,55,5],[1,2,49,4,55,5],[2,-3,55,4,52,5],[2,1,55,4,52,5],[3,-2,52,4,49,5],[3,-1,52,4,49,5],[-2,0,52,4,49,5],[-2,1,52,4,49,5],[-2,2,52,4,49,5],[-1,-1,49,4,55,5],[-1,2,49,4,55,5],[0,-2,55,4,52,5],[0,2,55,4,52,5],[1,-2,52,4,49,5],[1,1,52,4,49,5],[2,-2,49,4,55,5],[2,-1,49,4,55,5],[2,0,49,4,55,5],[-1,0,52,4,49,5],[-1,1,52,4,49,5],[0,-1,49,4,55,5],[0,1,49,4,55,5],[1,-1,55,4,52,5],[1,0,55,4,52,5],[0,0,52,4,49,5]],"q":[[[52,11],[52,9,0,1],[52,11,0,1],[52,9],[55,11],[55,9],[55,9],[55,11],[55,8]],[[49,13],[49,11,0,1],[49,11,0,1],[49,9],[49,9],[49,7],[52,9],[52,13],[52,11],[52,11],[52,9],[52,13],[52,6]],[[55,13],[55,11,0,1],[55,9,0,1],[55,9],[55,13],[49,13],[49,11],[49,13],[49,11],[49,9],[49,9]]]},
+  {"n":"HexaFlow_Level_12_HM","m":[0,1,3],"d":0,"fr":4,"rr":5,"c":[[-2,0,53,3],[-2,1,53,3],[-2,2,53,3],[-1,-1,56,3],[-1,2,56,3],[0,-2,50,3],[0,2,50,3],[1,-2,53,3],[1,1,53,3],[2,-2,56,3],[2,-1,56,3],[2,0,56,3],[-1,0,53,3],[-1,1,53,3],[0,-1,56,3],[0,1,56,3],[1,-1,50,3],[1,0,50,3],[0,0,53,3]],"q":[[[56,10,1],[56,10,2],[56,7],[56,9,3],[56,9],[56,4]],[[50,9,1],[50,9,2],[53,7],[53,10,3],[53,7],[53,10],[53,5],[53,10],[53,7],[50,10]]]},
+  {"n":"HexaFlow_Level_9_HM","m":[0,2,4],"d":0,"fr":4,"rr":5,"c":[[-3,1,50,2,52,2],[-3,2,50,2,52,2,55,2],[-3,3,55,2,50,2],[0,-3,55,2,50,2],[1,-3,52,2,55,2,50,2],[1,2,52,2,55,2],[2,-3,55,2,50,2],[2,1,55,2,50,2,52,2],[3,0,55,2,50,2],[-2,0,52,2,55,2],[-2,1,55,2,50,2],[-2,2,50,2,52,2],[-1,-1,50,2,52,2],[-1,2,50,2,52,2],[0,-2,55,2,50,2],[0,2,50,2,52,2],[1,-2,55,2,50,2],[1,1,55,2,50,2],[2,-2,55,2,50,2],[2,-1,50,2,52,2],[2,0,52,2,55,2],[-1,0,50,2,52,2],[-1,1,52,2,55,2],[0,-1,55,2,50,2],[0,1,52,2,55,2],[1,-1,55,2,50,2],[1,0,50,2,52,2],[0,0,50,2]],"q":[[[55,11],[55,11,0,1],[55,10],[50,13],[50,13],[50,9],[50,9],[50,11],[50,11],[50,13],[50,11],[50,9],[50,5],[50,8],[55,11],[55,9],[55,13],[55,9],[55,11],[55,11]],[[52,11],[52,13],[52,9],[52,11],[52,11],[52,13],[52,4],[50,11],[50,13],[50,11],[50,11],[50,11],[50,9],[50,6],[52,8]],[[55,13],[55,11,0,1],[55,13],[55,11],[52,13],[52,11],[52,11],[52,13],[55,8]]]},
+  {"n":"HexaFlow_Level_21_HM","m":[1,0,3],"d":0,"fr":4,"rr":5,"c":[[-3,0,48,1,44,2],[-2,-1,46,1,48,2],[-1,-2,44,1,46,2],[0,-3,48,1,44,2],[-2,0,48,3],[-2,1,48,2,44,2],[-2,2,44,2,46,2],[-1,-1,44,2,46,2],[-1,2,44,2,46,2],[0,-2,48,2,44,2],[0,2,46,3],[1,-2,48,2,44,2],[1,1,48,2,44,2],[2,-2,44,3],[2,-1,44,2,46,2],[2,0,46,2,48,2],[-1,0,44,2,46,2],[-1,1,46,2,48,2],[0,-1,48,2,44,2],[0,1,46,2,48,2],[1,-1,48,2,44,2],[1,0,44,2,46,2],[0,0,46,2,48,2,44,2]],"q":[[[44,11],[44,8],[48,10],[48,12,2],[48,9],[48,11],[48,9],[48,11],[48,12]],[[44,11],[44,9],[44,12,1],[46,10,2],[44,11],[44,12],[44,12],[46,11],[46,12],[44,12]],[[48,9],[48,9],[48,11,1],[48,10],[46,8]],[[46,9],[46,9],[46,12,1],[46,9],[46,12],[46,12],[44,9],[44,12],[44,9],[44,8]]]},
+  {"n":"HexaFlow_Level_11_HM","m":[0,5,1,3],"d":0,"fr":4,"rr":5,"c":[[-1,3,52,2,56,2],[0,3,52,2,54,2],[1,2,52,2,56,2],[2,1,52,2,54,2],[3,-2,52,2,54,2],[3,-1,52,2,56,2],[3,0,52,2,56,2],[-2,0,52,1,50,2,54,2],[-2,1,52,2,56,2],[-2,2,52,1,56,2,50,2],[-1,-1,52,2,50,2],[-1,2,52,2,56,2],[0,-2,52,1,50,2,54,2],[0,2,52,1,56,2,54,2],[1,-2,52,2,50,2],[1,1,52,2,50,2],[2,-2,52,1,54,2,50,2],[2,-1,52,2,50,2],[2,0,52,1,50,2,54,2],[-1,0,52,2,54,2],[-1,1,52,2,56,2],[0,-1,52,2,50,2],[0,1,52,2,54,2],[1,-1,52,2,56,2],[1,0,52,2,50,2],[0,0,52,1,54,2,56,2]],"q":[[[50,2],[50,7,0,1],[50,8,0,1],[50,8],[50,9],[50,9],[50,10],[50,11],[50,11],[50,13],[52,8],[52,8],[52,8],[52,8],[52,8],[52,8],[52,8]],[[52,9],[52,9,0,1],[52,9,0,1],[52,9],[52,10],[52,10],[52,10],[52,11],[52,11],[52,11],[52,12],[52,12],[52,12],[52,12],[52,12],[54,6],[54,8]],[[54,8],[54,8,0,1],[54,10,0,1],[54,10],[54,12],[54,13],[54,13],[56,6],[56,8],[56,8],[56,8],[56,10],[56,10],[56,12],[56,13],[56,13]]]},
+];   // <<< LEVELS
+
+// ===== Ядро веб-порта Hexa Glide (hexaglide-web/index.html), перенесено без изменений =====
+// >>> HEXAGLIDE
+const DIRS = [[0,1],[-1,1],[-1,0],[0,-1],[1,-1],[1,0]];
+// Соседи HexCoord (_neighbors) — другой порядок, используется только для обхода кольца
+const NEIGHBORS = [[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+const K = (q, r) => q + ',' + r;
+const UNK = s => { const i = s.indexOf(','); return [+s.slice(0, i), +s.slice(i + 1)]; };
+function hexDist(aq, ar, bq, br){
+  const dq = aq - bq, dr = ar - br;
+  return (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+}
+// HexCoord.SingleRing: старт в center + neighbors[4]*radius, затем по 6 сторон
+function singleRing(radius){
+  const out = [];
+  let q = NEIGHBORS[4][0] * radius, r = NEIGHBORS[4][1] * radius;
+  for (let i = 0; i < 6; i++){
+    for (let j = 0; j < radius; j++){
+      out.push(K(q, r));
+      q += NEIGHBORS[i][0]; r += NEIGHBORS[i][1];
+    }
+  }
+  return out;
+}
+// HexaFlowTestLevel.InwardDir: направление грида, ведущее ближе всего к центру
+function inwardDir(k){
+  const [q, r] = UNK(k);
+  let best = 0, bestLen = 1e9;
+  for (let d = 0; d < 6; d++){
+    const len = hexDist(q + DIRS[d][0], r + DIRS[d][1], 0, 0);
+    if (len < bestLen){ bestLen = len; best = d; }
+  }
+  return best;
+}
+// Залитый гексагон радиуса R — пол поля
+function filledHex(radius){
+  const out = [];
+  for (let q = -radius; q <= radius; q++){
+    const lo = Math.max(-radius, -q - radius), hi = Math.min(radius, -q + radius);
+    for (let r = lo; r <= hi; r++) out.push(K(q, r));
+  }
+  return out;
+}
+
+function loadLevel(def){
+  const fieldR = def.fr || 4, ringR = def.rr || 5;
+  const st = {
+    name: def.n, diff: def.d || 0, fieldR, ringR,
+    field: new Set(filledHex(fieldR)),
+    ring: singleRing(ringR),
+    inward: null,
+    center: new Map(),        // k → { layers: [{color, amount}] }, layers снизу вверх, последний активен
+    columns: [],              // [колонка][ряд] = {color, count, link, secret}
+    travelers: [],            // стопки на ленте
+    slots: [],                // парковка, ≤ maxSlots
+    pending: new Set(),       // клетки, чей слой добит, но фишки ещё летят — блокируют луч
+    capacity: CFG.maxOnConveyor,
+    deposited: 0, needed: 0,  // прогресс: уложено фишек / нужно всего
+    ended: null,              // null | 'win' | 'lose'
+    travSeq: 0,
+  };
+  st.inward = st.ring.map(inwardDir);
+  for (const row of def.c || []){
+    const q = row[0], r = row[1], layers = [];
+    for (let i = 2; i + 1 < row.length; i += 2) layers.push({ color: row[i], amount: row[i + 1] });
+    if (!layers.length) continue;
+    st.center.set(K(q, r), { layers });
+    for (const l of layers) st.needed += Math.max(0, CFG.maxCenter - l.amount);
+  }
+  for (const col of def.q || []){
+    st.columns.push(col.map(s => ({ color: s[0], count: s[1], link: s[2] || 0, secret: !!s[3] })));
+  }
+  revealFronts(st);           // секреты первого ряда раскрыты сразу (BuildQueueVisuals, row 0)
+  return st;
+}
+// Секретная стопка снимает флаг, попав в первый ряд очереди
+function revealFronts(st){
+  const out = [];
+  for (let c = 0; c < st.columns.length; c++){
+    const f = st.columns[c][0];
+    if (f && f.secret){ f.secret = false; out.push(c); }
+  }
+  return out;
+}
+function queueEmpty(st){ return st.columns.every(c => c.length === 0); }
+// IsEndgameLoop: очередь И парковка пусты → стопки не паркуются, а идут новыми кругами (и лента ×2)
+function endgameLoop(st){ return queueEmpty(st) && st.slots.length === 0; }
+function stepInterval(st){ return endgameLoop(st) ? CFG.stepInterval / CFG.queueEmptySpeedMul : CFG.stepInterval; }
+function isWon(st){ return st.center.size === 0; }
+
+// TryScanTarget: прямой луч внутрь по всем 6 сторонам, берётся БЛИЖАЙШАЯ подходящая центр-стопка.
+// Первая стопка на луче либо цель (цвет совпал и слой не полон), либо блок — дальше по этой стороне не смотрим.
+function scanTarget(st, ringK, color, usedEntries){
+  const [rq, rr] = UNK(ringK);
+  let best = null, bestDist = 1e9;
+  const maxScan = st.ringR * 2 + 1;
+  for (let d = 0; d < 6; d++){
+    const [dq, dr] = DIRS[d];
+    const entry = K(rq + dq, rr + dr);
+    if (usedEntries && usedEntries.has(entry)) continue;   // эта плитка входа уже отдала фишку за круг
+    let q = rq, r = rr;
+    for (let s = 0; s < maxScan; s++){
+      q += dq; r += dr;
+      const k = K(q, r);
+      if (st.pending.has(k)) break;                        // фишка ещё летит — стопка стоит, луч закрыт
+      const pile = st.center.get(k);
+      if (pile){
+        const top = pile.layers[pile.layers.length - 1];
+        if (top.color === color && top.amount < CFG.maxCenter && s + 1 < bestDist){
+          bestDist = s + 1; best = { target: k, dir: d, entry, dist: s + 1 };
+        }
+        break;                                             // первая стопка на стороне — совпала или блок
+      }
+    }
+  }
+  return best;
+}
+// ApplyDeposit: +1 фишка в верхний слой; на 10 слой снимается, последний слой — стопка уходит с поля
+function applyDeposit(st, trav, targetK){
+  const pile = st.center.get(targetK);
+  const top = pile.layers[pile.layers.length - 1];
+  top.amount += 1;
+  trav.remaining -= 1;
+  st.deposited += 1;
+  const layerCleared = top.amount >= CFG.maxCenter;
+  let cellCleared = false;
+  if (layerCleared){
+    if (pile.layers.length > 1) pile.layers.pop();
+    else { st.center.delete(targetK); cellCleared = true; }
+  }
+  return { layerCleared, cellCleared };
+}
+// DepositLive: одна укладка с одной клетки ленты; плитка входа занимается на круг
+function deposit(st, trav, ringK, ev){
+  if (trav.remaining <= 0) return false;
+  const hit = scanTarget(st, ringK, trav.color, trav.usedEntries);
+  if (!hit) return false;
+  trav.usedEntries.add(hit.entry);
+  const res = applyDeposit(st, trav, hit.target);
+  if (res.layerCleared || res.cellCleared) st.pending.add(hit.target);
+  ev.push({ kind: 'deposit', trav, from: ringK, target: hit.target, dir: hit.dir, dist: hit.dist,
+            color: trav.color, layerCleared: res.layerCleared, cellCleared: res.cellCleared });
+  return true;
+}
+
+function occupiedCells(st, except){
+  const s = new Set();
+  for (const t of st.travelers) if (t !== except) s.add(t.ringIndex);
+  return s;
+}
+// FirstFreeEntryCell: на старт (0) встаём, только если свободны и он, и клетка перед ним —
+// иначе новая стопка окажется позади уже стоящих (переворот порядка)
+function firstFreeEntryCell(st, except){
+  const n = st.ring.length;
+  const occ = occupiedCells(st, except);
+  const behind = (n - 1) % n;
+  if (!occ.has(0) && !occ.has(behind)) return 0;
+  let spawn = 0, seen = false;
+  for (let i = 0; i < n; i++){
+    const c = ((0 - i) % n + n) % n;
+    if (occ.has(c)){ spawn = ((c - 1) % n + n) % n; seen = true; }
+    else if (seen) break;
+  }
+  return spawn;
+}
+function makeTraveler(st, color, count, link, t){
+  const cell = firstFreeEntryCell(st);
+  const trav = { id: st.travSeq++, color, remaining: Math.max(1, count), ringIndex: cell,
+                 cellsTraveled: 0, started: cell === 0, link: link || 0,
+                 usedEntries: new Set(), lastAim: -1,
+                 entering: true, enterAt: t, enterUntil: t + CFG.jumpTime, visFrom: cell, visAt: t };
+  st.travelers.push(trav);
+  return trav;
+}
+
+// Тап по колонке очереди. Возвращает список событий либо null (деплой невозможен).
+function deployColumn(st, col, t){
+  if (st.ended) return null;
+  const cols = st.columns;
+  if (!cols[col] || !cols[col].length) return null;
+  const front = cols[col][0];
+  const ev = [];
+  if (front.link > 0){
+    // Связка деплоится только целиком: все члены должны стоять на фронте своих колонок
+    const fronts = [];
+    let buried = false;
+    for (let c = 0; c < cols.length; c++){
+      for (let r = 0; r < cols[c].length; r++){
+        if (cols[c][r].link !== front.link) continue;
+        if (r === 0) fronts.push(c); else buried = true;
+      }
+    }
+    if (buried) return { rejected: 'buried', link: front.link, ev: [] };
+    if (st.travelers.length + fronts.length > st.capacity) return { rejected: 'full', link: front.link, ev: [] };
+    fronts.sort((a, b) => a - b);
+    if (col !== fronts[0]) fronts.reverse();
+    for (const c of fronts){
+      const s = cols[c].shift();
+      const trav = makeTraveler(st, s.color, s.count, s.link, t);
+      ev.push({ kind: 'deploy', trav, col: c, row: 0, linked: true });
+    }
+  } else {
+    if (st.travelers.length >= st.capacity) return { rejected: 'full', ev: [] };
+    const s = cols[col].shift();
+    const trav = makeTraveler(st, s.color, s.count, 0, t);
+    ev.push({ kind: 'deploy', trav, col, row: 0 });
+  }
+  for (const c of revealFronts(st)) ev.push({ kind: 'reveal', col: c });
+  return { ev };
+}
+// Тап по слоту парковки: стопка возвращается на ленту (связка — только целиком)
+function relaunchSlot(st, idx, t){
+  if (st.ended) return null;
+  const trav = st.slots[idx];
+  if (!trav) return null;
+  const group = trav.link > 0 ? st.slots.filter(s => s.link === trav.link) : [trav];
+  if (st.travelers.length + group.length > st.capacity) return { rejected: 'full', ev: [] };
+  const ev = [];
+  for (const g of group){
+    const from = st.slots.indexOf(g);
+    st.slots.splice(from, 1);
+    g.cellsTraveled = 0; g.lastAim = -1; g.usedEntries.clear();
+    g.ringIndex = firstFreeEntryCell(st, g);
+    g.started = g.ringIndex === 0;
+    g.entering = true; g.enterAt = t; g.enterUntil = t + CFG.jumpTime;
+    g.visFrom = g.ringIndex; g.visAt = t;
+    st.travelers.push(g);
+    ev.push({ kind: 'relaunch', trav: g, slot: from });
+  }
+  return { ev };
+}
+// Приземление после прыжка: клетка входа тоже отдаёт фишку (TryDepositOnLanding).
+// StartMovingNow (немедленный шаг вне фазы тика) не портируем — это сглаживание визуала;
+// на данные он влияет только тем, что стопка трогается на тик раньше.
+function landTravelers(st, t){
+  const ev = [];
+  for (const trav of st.travelers){
+    if (!trav.entering || t < trav.enterUntil) continue;
+    trav.entering = false;
+    if (trav.started && trav.remaining > 0 && trav.ringIndex !== trav.lastAim){
+      if (deposit(st, trav, st.ring[trav.ringIndex], ev)) trav.lastAim = trav.ringIndex;
+    }
+  }
+  return ev;
+}
+function groupHasChips(st, link){
+  return st.travelers.some(t => t.link === link && t.remaining > 0) ||
+         st.slots.some(t => t.link === link && t.remaining > 0);
+}
+
+// StepSlide: один тик ленты. Порядок внутри тика — от хвоста списка к голове, как в игре.
+function step(st, t){
+  const ev = [];
+  if (st.ended || !st.travelers.length) return ev;
+  const ring = st.ring, n = ring.length;
+  const occ = occupiedCells(st);
+  for (let i = st.travelers.length - 1; i >= 0; i--){
+    const trav = st.travelers[i];
+    if (trav.entering) continue;       // прыжок ещё летит: клетку резервирует, но не едет и не кладёт
+
+    // 1) Укладка с упреждением на клетку: цель ищем от клетки, в которую стопка встанет этим же тиком
+    let aim = trav.ringIndex;
+    const next = (trav.ringIndex + 1) % n;
+    const willMove = next !== trav.ringIndex && !occ.has(next);
+    const staysOnRing = trav.cellsTraveled + 1 < n || endgameLoop(st);
+    if (willMove && staysOnRing && trav.remaining > 1) aim = next;
+    if ((trav.started || aim === 0) && aim !== trav.lastAim){
+      if (deposit(st, trav, ring[aim], ev)) trav.lastAim = aim;
+    }
+
+    // 2) Груз сдан: одиночная стопка уходит с ленты сразу, связанная едет пустым поддоном с партнёрами
+    if (trav.remaining <= 0){
+      if (trav.link > 0){
+        if (!groupHasChips(st, trav.link)){
+          const gone = st.travelers.filter(x => x.link === trav.link);
+          st.travelers = st.travelers.filter(x => x.link !== trav.link);
+          for (const g of gone) ev.push({ kind: 'despawn', trav: g });
+          return ev;                   // список изменился — дотикаем в следующий Step
+        }
+      } else {
+        occ.delete(trav.ringIndex);
+        st.travelers.splice(i, 1);
+        ev.push({ kind: 'despawn', trav });
+        continue;
+      }
+    }
+
+    // 3) Продвижение на следующую клетку (no-overtaking)
+    if (next !== trav.ringIndex && !occ.has(next)){
+      occ.delete(trav.ringIndex);
+      trav.visFrom = trav.ringIndex; trav.visAt = t;
+      trav.ringIndex = next;
+      if (next === 0){ trav.started = true; trav.usedEntries.clear(); }   // новый круг — плитки входа свободны
+      occ.add(next);
+      trav.cellsTraveled++;
+      ev.push({ kind: 'move', trav });
+    }
+
+    // 4) Полный круг пройден, а фишки остались
+    if (trav.cellsTraveled >= n){
+      if (endgameLoop(st)){
+        trav.cellsTraveled = 0; trav.lastAim = -1; trav.usedEntries.clear();
+      } else if (trav.link > 0){
+        const group = st.travelers.filter(x => x.link === trav.link);
+        if (st.slots.length + group.length <= CFG.maxSlots){
+          st.travelers = st.travelers.filter(x => x.link !== trav.link);
+          for (const g of group){ g.cellsTraveled = 0; st.slots.push(g); ev.push({ kind: 'park', trav: g, slot: st.slots.length - 1 }); }
+        } else {
+          st.ended = 'lose'; ev.push({ kind: 'lose', trav });
+        }
+        return ev;                     // список изменился — дотикаем в следующий Step
+      } else {
+        occ.delete(trav.ringIndex);
+        st.travelers.splice(i, 1);
+        if (st.slots.length < CFG.maxSlots){
+          trav.cellsTraveled = 0;
+          st.slots.push(trav);
+          ev.push({ kind: 'park', trav, slot: st.slots.length - 1 });
+        } else {
+          st.ended = 'lose';
+          ev.push({ kind: 'lose', trav });
+          return ev;
+        }
+      }
+    }
+  }
+  if (!st.ended && isWon(st)) { st.ended = 'win'; ev.push({ kind: 'win' }); }
+  return ev;
+}
+// Победа может наступить и вне тика — сразу после последней укладки
+function checkWin(st, ev){
+  if (!st.ended && isWon(st)){ st.ended = 'win'; ev.push({ kind: 'win' }); }
+  return ev;
+}
+// Допустимые действия — для ботов и симулятора
+function legalActions(st){
+  const out = [];
+  if (st.ended) return out;
+  for (let c = 0; c < st.columns.length; c++){
+    const f = st.columns[c][0];
+    if (!f) continue;
+    if (f.link > 0){
+      let fronts = 0, buried = false;
+      for (let i = 0; i < st.columns.length; i++)
+        for (let r = 0; r < st.columns[i].length; r++)
+          if (st.columns[i][r].link === f.link){ if (r === 0) fronts++; else buried = true; }
+      if (buried || st.travelers.length + fronts > st.capacity) continue;
+    } else if (st.travelers.length >= st.capacity) continue;
+    out.push({ kind: 'column', i: c });
+  }
+  const seen = new Set();
+  for (let i = 0; i < st.slots.length; i++){
+    const s = st.slots[i];
+    if (s.link > 0){ if (seen.has(s.link)) continue; seen.add(s.link); }
+    const need = s.link > 0 ? st.slots.filter(x => x.link === s.link).length : 1;
+    if (st.travelers.length + need <= st.capacity) out.push({ kind: 'slot', i });
+  }
+  return out;
+}
+function applyAction(st, a, t){
+  return a.kind === 'column' ? deployColumn(st, a.i, t) : relaunchSlot(st, a.i, t);
+}
+
+// --- бот (общий для игры и симулятора; не правила, но источник один) ---
+// Порт эталонного игрока из HexaFlowSystem.IsQueuePlayable — им игра проверяет, что уровень
+// вообще проходится. Приоритеты те же:
+//   1. вернуть с парковки стопку, чей цвет достижим прямо сейчас;
+//   2. иначе выпустить фронт очереди, который сейчас полезен и даёт минимальный «мёртвый» излишек;
+//   3. иначе выпустить любой фронт, чтобы добраться до стопки за ним (пока парковка держит);
+//   4. иначе ходов нет — это и есть затор.
+
+// Достижимые центр-стопки: первая стопка на луче внутрь от любой клетки кольца (ReachableSet)
+function reachableSet(st){
+  const out = new Set();
+  const maxScan = st.ringR * 2 + 1;
+  for (const rk of st.ring){
+    const [rq, rr] = UNK(rk);
+    for (let d = 0; d < 6; d++){
+      const [dq, dr] = DIRS[d];
+      let q = rq, r = rr;
+      for (let s = 0; s < maxScan; s++){
+        q += dq; r += dr;
+        const k = K(q, r);
+        if (!st.center.has(k)) continue;
+        out.add(k);
+        break;                                     // первая стопка на луче — дальше закрыто
+      }
+    }
+  }
+  return out;
+}
+// Достижимая нужда по цветам — для подсветки и оценки хода
+function reachableNeed(st){
+  const need = new Map();
+  for (const k of reachableSet(st)){
+    const top = st.center.get(k).layers.slice(-1)[0];
+    need.set(top.color, (need.get(top.color) || 0) + (CFG.maxCenter - top.amount));
+  }
+  return need;
+}
+// RemainingNeed: сколько фишек цвета нужно полю ВСЕГО, включая закрытые слои
+function totalNeed(st, color){
+  let need = 0;
+  for (const pile of st.center.values())
+    for (const l of pile.layers) if (l.color === color) need += Math.max(0, CFG.maxCenter - l.amount);
+  return need;
+}
+function greedyAction(st, rng){
+  const acts = legalActions(st);
+  if (!acts.length) return null;
+  // Сколько фишек каждого цвета поле готово принять ПРЯМО СЕЙЧАС, за вычетом уже едущего по ленте.
+  // Эталонный солвер игры развозит по одной стопке за раз и такого учёта не требует; здесь стопки
+  // едут одновременно, и без него бот заваливает ленту одним цветом сверх спроса — это и есть затор.
+  const free = reachableNeed(st);
+  for (const t of st.travelers) free.set(t.color, (free.get(t.color) || 0) - t.remaining);
+  const fits = group => st.slots.length + group.length <= CFG.maxSlots;
+  const groupOf = s => s.link > 0 ? st.columns.filter(c => c[0] && c[0].link === s.link).map(c => c[0]) : [s];
+
+  // 1) вернуть с парковки стопку, чей цвет поле сейчас примет
+  const slotActs = acts.filter(a => a.kind === 'slot' && st.slots[a.i].remaining > 0 &&
+                                    (free.get(st.slots[a.i].color) || 0) > 0);
+  if (slotActs.length) return slotActs[Math.floor(rng() * slotActs.length) % slotActs.length];
+
+  // 2) фронт очереди, который сейчас полезен, с минимальным «мёртвым» излишком (RemainingNeed).
+  //    У связки полезными должны быть ВСЕ члены: группа занимает слот на каждого, и один
+  //    ненужный цвет утаскивает на парковку всю сцепку.
+  let best = null, bestWaste = Infinity;
+  for (const a of acts){
+    if (a.kind !== 'column') continue;
+    const group = groupOf(st.columns[a.i][0]);
+    if (!group.every(g => (free.get(g.color) || 0) > 0)) continue;
+    if (!fits(group)) continue;
+    let waste = 0;
+    for (const g of group) waste += Math.max(0, g.count - totalNeed(st, g.color));
+    if (waste < bestWaste){ bestWaste = waste; best = a; }
+  }
+  if (best) return best;
+
+  // 3) на ленте ещё идёт доставка — обычно ждём, а не забиваем ленту лишним. Ожидание не вечное:
+  //    иногда ходим всё равно, иначе бот залипает на стопке, которая свою цель уже не найдёт.
+  if (st.travelers.some(t => t.remaining > 0) && st.slots.length < CFG.maxSlots && rng() > 0.12) return null;
+
+  // 4) копаем очередь: выпускаем застрявший фронт, чтобы добраться до стопки за ним
+  for (const a of acts){
+    if (a.kind !== 'column') continue;
+    const group = groupOf(st.columns[a.i][0]);
+    if (fits(group)) return a;
+  }
+  return null;
+}
+// <<< HEXAGLIDE
+// ===== конец ядра Hexa Glide =====
+
+// Вид металла для каждого цвета уровня: по порядку появления (сначала столбики, потом очередь), с перестановкой def.m.
+function metalMap(def){
+  const m = new Map();
+  const add = (c) => { if (!m.has(c)) m.set(c, def.m && def.m[m.size] !== undefined ? def.m[m.size] : m.size); };
+  for (const row of def.c) for (let i = 2; i + 1 < row.length; i += 2) add(row[i]);
+  for (const col of def.q) for (const s of col) add(s[0]);
+  return m;
+}
+
+// --- безголовый прогон и солвер (из analysis.mjs веб-порта; исполняются и симулятором, и хуком) ---
+// >>> PLAYOUT
+// Монеты долетают мгновенно — снимаем блокировку клетки сразу после укладки.
+function settle(st, ev){ for (const e of ev) if (e.kind === 'deposit' && (e.layerCleared || e.cellCleared)) st.pending.delete(e.target); }
+function randomAct(st, rng){ const acts = legalActions(st); return acts.length ? acts[Math.floor(rng() * acts.length)] : null; }
+const MAX_TICKS = 4000;
+// Реалтайм-партия: одно решение политики за тик, тики по stepInterval, прыжок мгновенный.
+function playout(def, policy, seed){
+  const jt = CFG.jumpTime; CFG.jumpTime = 0;
+  try {
+    const st = loadLevel(def), rng = mulberry32(seed);
+    let t = 0, ticks = 0, actions = 0, idle = 0, peak = 0;
+    while (!st.ended && ticks < MAX_TICKS){
+      let acted = false;
+      if (st.travelers.length < st.capacity){
+        const act = policy(st, rng);
+        if (act){ const res = applyAction(st, act, t); if (res && !res.rejected){ settle(st, res.ev); actions++; acted = true; } }
+      }
+      idle = acted ? 0 : idle + 1;
+      settle(st, landTravelers(st, t));
+      settle(st, step(st, t));
+      peak = Math.max(peak, st.slots.length);
+      t += stepInterval(st); ticks++;
+      if (!st.ended && !st.travelers.length && idle > 2) return { won: false, stuck: true, ticks, actions, left: st.center.size, peak };
+    }
+    return { won: st.ended === 'win', jam: st.ended === 'lose', timeout: ticks >= MAX_TICKS, ticks, actions, left: st.center.size, peak, secs: t };
+  } finally { CFG.jumpTime = jt; }
+}
+// Порт HexaFlowSystem.IsQueuePlayable — солвер, которым сама игра проверяет проходимость уровня (без изменений).
+function queuePlayable(def, maxSlots){
+  maxSlots = maxSlots || CFG.maxSlots;
+  const st = loadLevel(def);
+  const colQ = st.columns.map(c => c.slice());
+  const parked = [];
+  let parkedPeak = 0, guard = 0;
+  const slotsOf = u => u.colors.length;
+  const parkedSlots = () => parked.reduce((n, u) => n + slotsOf(u), 0);
+  const topOf = k => st.center.get(k).layers[st.center.get(k).layers.length - 1];
+  const countColor = (rs, color) => { let n = 0; for (const k of rs) if (topOf(k).color === color) n++; return n; };
+  const unitUseful = (u, rs) => u.colors.some((c, i) => u.counts[i] > 0 && countColor(rs, c) > 0);
+  const unitFromFronts = col => {
+    if (!colQ[col].length) return null;
+    const front = colQ[col][0];
+    if (!front.link) return { unit: { colors: [front.color], counts: [front.count], link: 0 }, cols: [col] };
+    const colors = [], counts = [], cols = [];
+    for (let c = 0; c < colQ.length; c++){
+      if (!colQ[c].length || colQ[c][0].link !== front.link) continue;
+      colors.push(colQ[c][0].color); counts.push(colQ[c][0].count); cols.push(c);
+    }
+    let total = 0;
+    for (const c of colQ) for (const e of c) if (e.link === front.link) total++;
+    if (colors.length !== total) return null;
+    return { unit: { colors, counts, link: front.link }, cols };
+  };
+  while (st.center.size > 0){
+    if (++guard > 100000) return { ok: false, reason: 'guard overflow', parkedPeak };
+    const rs = reachableSet(st);
+    let unit = null;
+    for (let i = 0; i < parked.length; i++) if (unitUseful(parked[i], rs)){ unit = parked.splice(i, 1)[0]; break; }
+    if (!unit){
+      let bestWaste = Infinity, bestCols = null;
+      for (let c = 0; c < colQ.length; c++){
+        const cand = unitFromFronts(c);
+        if (!cand || !unitUseful(cand.unit, rs)) continue;
+        if (parkedSlots() + slotsOf(cand.unit) > maxSlots) continue;
+        let waste = 0;
+        cand.unit.colors.forEach((col, i) => { waste += Math.max(0, cand.unit.counts[i] - totalNeed(st, col)); });
+        if (waste < bestWaste){ bestWaste = waste; unit = cand.unit; bestCols = cand.cols; }
+      }
+      if (unit) for (const c of bestCols) colQ[c].shift();
+    }
+    if (!unit){
+      let dug = false;
+      for (let c = 0; c < colQ.length && !dug; c++){
+        const cand = unitFromFronts(c);
+        if (!cand || parkedSlots() + slotsOf(cand.unit) > maxSlots) continue;
+        for (const cc of cand.cols) colQ[cc].shift();
+        parked.push(cand.unit);
+        parkedPeak = Math.max(parkedPeak, parkedSlots());
+        dug = true;
+      }
+      if (dug) continue;
+      const anyLeft = colQ.some(c => c.length);
+      return { ok: false, parkedPeak, reason: !anyLeft ? 'очередь пуста, лоток не разобран (осталось ' + st.center.size + ')'
+                                                     : 'затор: мест ' + parkedSlots() + '/' + maxSlots + ', осталось ' + st.center.size };
+    }
+    for (let m = 0; m < unit.colors.length; m++){
+      const color = unit.colors[m];
+      const fake = { remaining: unit.counts[m] };
+      while (fake.remaining > 0){
+        const r2 = reachableSet(st);
+        let any = false;
+        for (const cc of r2){
+          if (fake.remaining <= 0) break;
+          const p = st.center.get(cc);
+          if (!p) continue;
+          const top = p.layers[p.layers.length - 1];
+          if (top.color !== color || top.amount >= CFG.maxCenter) continue;
+          any = true;
+          applyDeposit(st, fake, cc);
+        }
+        if (!any) break;
+      }
+      unit.counts[m] = fake.remaining;
+    }
+    if (unit.counts.some(c => c > 0)){ parked.push(unit); parkedPeak = Math.max(parkedPeak, parkedSlots()); }
+  }
+  return { ok: true, parkedPeak };
+}
+// <<< PLAYOUT
+// Бот-транжира: выпускает любой кошелёк, не глядя на лоток, — так игра проигрывается (проверка затора).
+function dumbAction(st, rng){ const acts = legalActions(st).filter(a => a.kind === 'column'); return acts.length ? acts[Math.floor(rng() * acts.length)] : null; }
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* КОНЕЦ ЯДРА */
+</script>
+<script src="assets/sfx.js"></script>
+<script src="assets/scene3d.js"></script>
+<script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Оболочка: экраны, ввод, ощущение, сейв, дебаг-хук. Правил здесь нет — только то, как их показать и озвучить.
+// Время абсолютное (§4): игровые часы now() — функция от performance.now(); хит-стоп, замедление и пауза — масштаб часов.
+// ---------------------------------------------------------------------------
+const NAME = 'monetnyy-sorter';
+const SAVE_KEY = NAME + '.v1';
+const $ = (id) => document.getElementById(id);
+function loadSave(){ try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } }
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)); } catch (e) {} }
+
+const G = {
+  st: null, li: 0, def: null,        // состояние ядра, номер и описание уровня
+  screen: 'menu',                    // menu | game | win | lose | help
+  save: Object.assign({ level: 0, muted: false, best: {}, unlockAll: false }, loadSave()),
+  speed: 1, slow: 1, paused: false,  // множители игровых часов: отладка, замедление проигрыша, пауза
+  kinds: new Map(),                  // цвет ядра → вид металла
+  vp: new Map(),                     // столбики на экране: k → { x, z, layers: [{ kind, landed, promised, wrap }], … }
+  coins: [], wraps: [], rolls: [],   // летящие монеты, идущие заворачивания, летящие роллы
+  wv: new Map(), gone: [],           // кошельки на экране (объект ядра → вид) и улетающие пустые
+  fx: [], scat: [],                  // 2D-эффекты и рассыпанные монеты проигрыша
+  introAt: -9, score: 0, barU: 0, rollsDone: 0, rollsTotal: 0, goalW: [0, 2.4, -12], dt: 0.016, combo: { n: 0, at: -9 },
+  tickN: 0, lastTickT: 0, curInterval: CFG.stepInterval, nextTick: 0,
+  spin: 0, tension: 0, tickSndAt: 0, hint: false,
+  dial: 0, safeKick: -9,
+  end: null,                         // сценарий конца уровня: { kind: 'win' | 'lose', r0, … }
+  auto: null, botRng: null,
+  vibAt: 0,
+};
+const L = { n: 30, cells: [], slots: [], queue: [] };           // раскладка уровня в мире
+
+// --- игровые часы ---
+const Clock = { base: 0, anchor: performance.now(), scale: 1, off: 0, stopUntil: 0 };
+const realNow = () => performance.now() + Clock.off;            // off растёт только в ручном прогоне drive()
+const clockScale = () => G.paused ? 0 : G.speed * G.slow;
+function now(){
+  const r = realNow();
+  if (Clock.stopUntil && r >= Clock.stopUntil){                 // хит-стоп кончился ровно в свой срок
+    Clock.base += (Clock.stopUntil - Clock.anchor) / 1000 * Clock.scale; Clock.anchor = Clock.stopUntil; Clock.scale = clockScale(); Clock.stopUntil = 0;
+  }
+  return Clock.base + (r - Clock.anchor) / 1000 * Clock.scale;
+}
+function reclock(){ const t = now(); Clock.base = t; Clock.anchor = realNow(); Clock.scale = clockScale() * (Clock.stopUntil ? CFG.hitStopScale : 1); }
+function hitStop(ms){ const t = now(), r = realNow(); Clock.base = t; Clock.anchor = r; Clock.scale = clockScale() * CFG.hitStopScale; Clock.stopUntil = Math.max(Clock.stopUntil, r + ms / Math.max(0.1, G.speed)); }
+function setSlow(s){ G.slow = s; reclock(); }
+
+function log(kind, name, info){            // журнал [game] — одна строка на событие (§11)
+  console.log('[game] ' + JSON.stringify({ t: +now().toFixed(3), kind, name, info: info === undefined ? '' : String(info) }));
+}
+Sfx.log = log; Sfx.muted = G.save.muted;
+function buzz(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+function buzzCoin(){ const r = realNow(); if (r - G.vibAt < CFG.vibGapMs) return; G.vibAt = r; buzz(CFG.vib.coin); }
+
+// --- математика ---
+const SQ3 = Math.sqrt(3), TAU = Math.PI * 2;
+const hexWorld = (q, r) => [1.5 * q, -SQ3 * (q / 2 + r)];       // как в веб-порте: Z ядра развёрнут на зрителя
+const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+const mix = (a, b, u) => a + (b - a) * u;
+const easeOut = (u) => 1 - Math.pow(1 - u, 3);
+const easeIn = (u) => u * u * u;
+const easeInOut = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+const spring = (s, f, d) => s < 0 ? 0 : Math.exp(-d * s) * Math.cos(f * s);     // затухающая пружина: 1 → 0 с перелётом
+const fxRnd = mulberry32(4711);                                  // случайность эффектов — свой генератор с сидом (§5)
+function hash01(n){ n = Math.imul(n ^ 0x9E3779B9, 0x85EBCA6B); n ^= n >>> 13; n = Math.imul(n, 0xC2B2AE35); n ^= n >>> 16; return (n >>> 0) / 4294967296; }
+// Точка на ленте: клетки кольца ядра стоят на своих местах гекс-сетки, между ними — по прямой.
+const ringPos = (fi) => { const n = L.n, i = Math.floor(fi), u = fi - i, a = L.cells[((i % n) + n) % n], b = L.cells[(((i + 1) % n) + n) % n]; return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]; };
+// Кватернион монеты: нормаль (nx, ny, nz) и поворот phi вокруг неё: q = поворот(Y → n) · поворот(Y, phi).
+function quatNS(nx, ny, nz, phi, q){
+  let ax = nz, az = -nx, aw = 1 + ny; let l = Math.hypot(ax, az, aw);
+  if (l < 1e-6){ ax = 1; az = 0; aw = 0; l = 1; }
+  ax /= l; az /= l; aw /= l;
+  const s = Math.sin(phi / 2), c = Math.cos(phi / 2);
+  q[0] = ax * c - az * s; q[1] = aw * s; q[2] = ax * s + az * c; q[3] = aw * c; return q;
+}
+
+// --- экраны: DOM-оверлеи, любой открывается кодом или хешем (§6, §11) ---
+const isOpen = (li) => G.save.unlockAll || li <= G.save.level;
+function setUnlockAll(on){ G.save.unlockAll = !!on; save(); log('event', 'cheat', 'unlockAll=' + G.save.unlockAll); }
+function goto(screen){
+  if ((screen === 'win' || screen === 'lose' || screen === 'game') && !G.st){ startLevel(G.save.level); if (screen === 'game') return; }
+  G.screen = screen; log('screen', screen);
+  const ov = $('overlay'), card = $('card'), end = $('end');
+  ov.classList.toggle('show', screen === 'menu' || screen === 'help');
+  end.classList.toggle('hide', screen !== 'win' && screen !== 'lose');
+  $('revive').classList.toggle('hide', screen !== 'lose');
+  $('bar').classList.toggle('hide', screen !== 'game');
+  if (screen === 'menu'){
+    let lv = '';
+    for (let i = 0; i < LEVELS.length; i++) lv += `<button data-act="lvl" data-li="${i}" class="${isOpen(i) ? '' : 'locked'}${G.save.best[i] ? ' done' : ''}">${isOpen(i) ? i + 1 : '🔒'}</button>`;
+    card.innerHTML = `<h2>Монетный сортер</h2><p>Тапни кошелёк — он поедет по ленте и разложит монеты по своим столбикам. Десять монет — ролл в сейф.</p>
+      <button class="primary" data-act="play">Играть · уровень ${Math.min(G.save.level, LEVELS.length - 1) + 1}</button> <button data-act="help">Как играть</button>
+      <div class="levels">${lv}</div>
+      ${G.save.unlockAll ? '<button class="cheat" data-act="relock">Чит включён · закрыть обратно</button>' : '<button class="cheat" data-act="unlock">Чит: открыть все уровни</button>'}
+      <button class="cheat" data-act="wipe">Сбросить прогресс</button>
+      <button class="cheat" data-act="mute">Звук: ${G.save.muted ? 'выкл' : 'вкл'}</button>`;
+  }
+  if (screen === 'help') card.innerHTML = `<h2>Как играть</h2><p>Кошелёк едет по ленте вокруг лотка и кладёт монеты только в столбики своего металла — в ближайший по прямой.
+      Чужой столбик закрывает те, что за ним. Проехал круг с остатком — ложится на прилавок, мест пять. Шестому лечь некуда — проигрыш.
+      Кошелёк «?» откроется, когда встанет первым. Кошельки на резинке выходят только вместе.</p><button class="primary" data-act="menu">Понятно</button>`;
+  if (screen === 'win') end.innerHTML = `<h2>Уровень ${G.li + 1} пройден!</h2><p>В сейфе ${G.rollsDone} роллов</p>
+      <div class="reward"><img src="assets/ui/b-coins.png" alt=""><b id="win-coins">+${Math.round(G.score)}</b></div>
+      <div class="row"><button class="primary" data-act="next">${G.li + 1 < LEVELS.length ? 'Дальше' : 'Сначала'}</button><button data-act="retry">Ещё раз</button></div>`;
+  if (screen === 'lose') end.innerHTML = `<h2>Прилавок забит</h2><p>Шестому кошельку некуда лечь</p>
+      <div class="row"><button class="primary" data-act="retry">Заново</button><button data-act="menu">Меню</button></div>`;
+  if (screen === 'lose') placeRevive();
+}
+function placeRevive(){ if (!R3.ready) return; const p = R3.project(0, 0.6, CFG.slotZ - 2.4); const b = $('revive'); b.style.left = p[0] + 'px'; b.style.top = p[1] + 'px'; }
+$('frame').addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('[data-act]'); if (!el) return;
+  const act = el.dataset.act; Sfx.init(); Sfx.ui(); log('input', 'button', act);
+  if (act === 'play') startLevel(Math.min(G.save.level, LEVELS.length - 1));
+  else if (act === 'retry') startLevel(G.li);
+  else if (act === 'next') startLevel(G.li + 1 < LEVELS.length ? G.li + 1 : 0);
+  else if (act === 'help') goto('help');
+  else if (act === 'lvl'){ const li = +el.dataset.li; if (isOpen(li)) startLevel(li); else toast('Сначала пройди уровень ' + (G.save.level + 1)); }
+  else if (act === 'unlock' || act === 'relock'){ setUnlockAll(act === 'unlock'); goto('menu'); }
+  else if (act === 'wipe'){ G.save = { level: 0, muted: G.save.muted, best: {}, unlockAll: false }; save(); goto('menu'); }
+  else if (act === 'revive') toast('Заглушка: здесь будет шестое место за рекламу');
+  else if (act === 'boost') toast('Бустер пока не работает — заглушка');
+  else if (act === 'mute'){ G.save.muted = !G.save.muted; Sfx.setMuted(G.save.muted); save(); goto('menu'); }
+  else goto('menu');
+});
+window.addEventListener('hashchange', () => openHash(location.hash.slice(1)));
+function openHash(h){
+  if (h === 'unlock'){ setUnlockAll(true); goto('menu'); }
+  else if (/^l\d+$/.test(h)) startLevel(Math.max(1, Math.min(LEVELS.length, +h.slice(1))) - 1);
+  else if (h === 'game') startLevel(G.save.level);
+  else goto(['menu', 'help', 'win', 'lose'].includes(h) ? h : 'menu');
+}
+let toastUntil = 0;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.remove('hide'); toastUntil = performance.now() + CFG.toastMs; }
+function hud(){ $('hud-level').textContent = 'Уровень ' + (G.li + 1); }
+
+// ---------------------------------------------------------------------------
+// Уровень
+// ---------------------------------------------------------------------------
+function startLevel(li){
+  li = Math.max(0, Math.min(LEVELS.length - 1, li | 0));
+  G.speed = G.speed || 1; G.slow = 1; reclock();
+  const def = LEVELS[li], st = loadLevel(def), t = now();
+  G.li = li; G.def = def; G.st = st; G.kinds = metalMap(def);
+  L.n = st.ring.length; L.cells = st.ring.map((k) => hexWorld(...UNK(k)));
+  L.slots = []; for (let i = 0; i < CFG.maxSlots; i++) L.slots.push([(i - (CFG.maxSlots - 1) / 2) * CFG.slotDX, CFG.slotZ]);
+  L.queue = st.columns.map((col, c) => { const out = []; for (let r = 0; r <= CFG.queueRows; r++) out.push([(c - (st.columns.length - 1) / 2) * CFG.queueDX, CFG.queueZ + r * CFG.queueDZ]); return out; });
+  const wells = [...st.field], wellOf = new Map(wells.map((k, i) => [k, i]));
+  G.vp = new Map(); G.rollsTotal = 0; G.rollsDone = 0;
+  for (const [k, pile] of st.center){
+    const [q, r] = UNK(k), [x, z] = hexWorld(q, r); G.rollsTotal += pile.layers.length;
+    G.vp.set(k, { k, i: wellOf.get(k), x, z, delay: hexDist(q, r, 0, 0) * 0.07, seed: (q * 31 + r * 17 + li * 101) | 0, kick: -9, wob: null, flashAt: -9, emptyAt: -9,
+                  layers: pile.layers.map(l => ({ kind: G.kinds.get(l.color), landed: l.amount, promised: l.amount, wrap: null })) });
+  }
+  G.coins = []; G.wraps = []; G.rolls = []; G.wv = new Map(); G.gone = []; G.fx = []; G.scat = [];
+  G.score = 0; G.barU = 0; G.combo = { n: 0, at: -9 };
+  G.tickN = 0; G.lastTickT = t; G.curInterval = stepInterval(st); G.nextTick = t + G.curInterval;
+  G.spin = 0; G.tension = 0; G.dial = 0; G.safeKick = -9; G.end = null;
+  G.hint = li === 0; G.botRng = mulberry32(5000 + li);
+  const tv = CFG.trackAp / Math.cos(Math.PI / 6) + 0.2, tw = CFG.trackAp + 0.25;
+  R3.buildLevel({
+    wells: wells.map(k => hexWorld(...UNK(k))), slots: L.slots,
+    chev: L.cells.map((a, i) => { const b = L.cells[(i + 1) % L.n]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.atan2(-(b[0] - a[0]), -(b[1] - a[1]))]; }),
+    bounds: [[-tw, 0, 0], [tw, 0, 0], [0, 2.4, -tv], [0, 0, CFG.queueZ + CFG.queueDZ + 1.5]],
+  });
+  R3.setPad(CFG.hudTopPx, CFG.barPx);
+  syncWallets(t, true);
+  R3.warmUp(); R3.setVeil(0);
+  G.introAt = t; Sfx.cascade([...G.kinds.values()]);
+  log('event', 'level.start', 'level=' + (li + 1) + ' name=' + def.n + ' piles=' + st.center.size + ' need=' + st.needed);
+  goto('game'); hud();
+}
+
+// ---------------------------------------------------------------------------
+// Кошельки на экране. У каждого объекта ядра (элемент очереди или traveler) — свой вид W; при выходе на диск
+// вид переезжает с элемента очереди на traveler, так кошелёк остаётся тем же самым предметом.
+// ---------------------------------------------------------------------------
+function makeW(src, count){
+  return { src, kind: G.kinds.get(src.color), secret: !!src.secret, n0: Math.max(1, count), mode: 'queue', place: '', x: 0, y: 0, z: 0, tx: 0, tz: 0,
+           tw: null, jumpFrom: null, squashAt: -9, plopAt: -9, plopDone: true, shakeAt: -9, revealAt: -9, spitAt: -9, emit: 0, sxz: 1, sy: 1, topple: null };
+}
+function syncWallets(t, instant){
+  const st = G.st;
+  for (let c = 0; c < st.columns.length; c++){
+    const col = st.columns[c];
+    for (let r = 0; r < Math.min(col.length, CFG.queueRows); r++){
+      const obj = col[r], target = L.queue[c][r];
+      let W = G.wv.get(obj);
+      if (!W){ W = makeW(obj, obj.count); G.wv.set(obj, W); const from = L.queue[c][instant ? r : CFG.queueRows]; W.x = from[0]; W.z = from[1]; }
+      const place = 'q' + c + ':' + r;
+      if (W.place !== place){ if (!instant) W.tw = { x: W.x, y: W.y, z: W.z, t0: t, dur: CFG.queueShiftT, arc: 0 }; W.place = place; }
+      W.mode = 'queue'; W.col = c; W.row = r; W.tx = target[0]; W.tz = target[1]; W.secret = !!obj.secret;
+    }
+  }
+  for (let i = 0; i < st.slots.length; i++){
+    const W = G.wv.get(st.slots[i]); if (!W) continue;
+    const place = 's' + i;
+    if (W.place !== place){ W.tw = { x: W.x, y: W.y, z: W.z, t0: t, dur: CFG.queueShiftT, arc: 0 }; W.place = place; }
+    W.mode = 'slot'; W.slot = i; W.tx = L.slots[i][0]; W.tz = L.slots[i][1];
+  }
+  for (const trav of st.travelers){ const W = G.wv.get(trav); if (W){ W.mode = 'trav'; W.place = 't'; } }
+}
+// Где кошелёк на диске: прыжок при въезде (сначала сжатие на месте), иначе — между клетками по дуге обода.
+const TP = [0, 0, 0];
+function travPos(trav, W, t){
+  if (trav.entering){
+    const from = W.jumpFrom || [W.x, W.y, W.z], dur = Math.max(0.01, trav.enterUntil - trav.enterAt), sq = Math.min(CFG.tapSquashT, dur * 0.45);
+    const v = clamp01((t - trav.enterAt - sq) / (dur - sq)), to = ringPos(trav.ringIndex), e = easeOut(v);
+    TP[0] = mix(from[0], to[0], e); TP[1] = mix(from[1], 0, v) + Math.sin(Math.PI * v) * CFG.jumpArc; TP[2] = mix(from[2], to[1], e);
+  } else {
+    const a = trav.visFrom === undefined ? trav.ringIndex : trav.visFrom; let d = trav.ringIndex - a; if (d < 0) d += L.n; if (d > 1) d = 0;
+    const p = ringPos(a + d * clamp01((t - trav.visAt) / G.curInterval)); TP[0] = p[0]; TP[1] = 0; TP[2] = p[1];
+  }
+  return TP;
+}
+function placeWallet(W, t){
+  if (W.mode === 'trav' || W.mode === 'gone'){ const p = travPos(W.src, W, t); W.x = p[0]; W.y = p[1]; W.z = p[2]; return; }
+  if (W.mode === 'lost') return;
+  if (W.tw){
+    const u = clamp01((t - W.tw.t0) / W.tw.dur);
+    if (u >= 1){ W.tw = null; W.x = W.tx; W.y = 0; W.z = W.tz; }
+    else { const e = W.tw.arc ? u : easeOut(u); W.x = mix(W.tw.x, W.tx, e); W.z = mix(W.tw.z, W.tz, e); W.y = mix(W.tw.y, 0, e) + Math.sin(Math.PI * u) * W.tw.arc; }
+  } else { W.x = W.tx; W.y = 0; W.z = W.tz; }
+  if (!W.plopDone && t >= W.plopAt){ W.plopDone = true; Sfx.walletPlop(W.kind); buzz(CFG.vib.park); }
+}
+const shownCount = (W) => W.mode === 'queue' ? W.src.count : Math.max(0, W.src.remaining) + W.emit;
+
+// ---------------------------------------------------------------------------
+// События ядра → предметы на экране, звук, вибрация, журнал
+// ---------------------------------------------------------------------------
+function onEvents(ev, te){
+  const st = G.st;
+  for (const e of ev){
+    switch (e.kind){
+      case 'deploy': case 'relaunch': {
+        const W = G.wv.get(e.trav); if (!W) break;
+        W.jumpFrom = [W.x, W.y, W.z]; W.squashAt = te; W.mode = 'trav'; W.place = 't'; W.tw = null; W.plopDone = true;
+        Sfx.walletTap(W.kind); buzz(8);
+        log('event', e.kind, (e.kind === 'deploy' ? 'col=' + e.col : 'slot=' + e.slot) + ' metal=' + CFG.metals[W.kind].id + ' coins=' + e.trav.remaining); break; }
+      case 'reveal': {
+        const obj = st.columns[e.col][0], W = obj && G.wv.get(obj);
+        if (W){ W.secret = false; W.revealAt = te; Sfx.reveal(W.kind); addGlints(W.tx, 1.4, W.tz, 3, CFG.metals[W.kind].coin); }
+        log('event', 'secret.reveal', 'col=' + e.col); break; }
+      case 'deposit': {
+        const W = G.wv.get(e.trav), vp = G.vp.get(e.target); if (!vp) break;
+        let vl = null; for (let i = vp.layers.length - 1; i >= 0; i--) if (vp.layers[i].promised < CFG.maxCenter){ vl = vp.layers[i]; break; }
+        if (!vl) vl = vp.layers[vp.layers.length - 1];
+        vl.promised++;
+        const [fq, fr] = UNK(e.from), b = hexWorld(fq + DIRS[e.dir][0], fr + DIRS[e.dir][1]);
+        const t0 = te + (e.lead ? G.curInterval * CFG.chipRollLead : 0);
+        if (W) W.emit++;
+        G.coins.push({ W, kind: vl.kind, vp, vl, k: e.target, bx: b[0], bz: b[1], t0, t1: t0 + e.dist * CFG.chipSeg, P0: null,
+                       layerCleared: e.layerCleared, cellCleared: e.cellCleared });
+        break; }
+      case 'park': {
+        const W = G.wv.get(e.trav); if (!W) break;
+        W.mode = 'slot'; W.slot = e.slot; W.place = 's' + e.slot; W.tx = L.slots[e.slot][0]; W.tz = L.slots[e.slot][1];
+        W.tw = { x: W.x, y: W.y, z: W.z, t0: te, dur: CFG.parkT, arc: CFG.parkArc }; W.plopAt = te + CFG.parkT; W.plopDone = false;
+        log('event', 'park', 'slot=' + e.slot + ' coins=' + e.trav.remaining + ' places=' + st.slots.length + '/' + CFG.maxSlots); break; }
+      case 'despawn': {
+        const W = G.wv.get(e.trav); if (!W) break;
+        G.wv.delete(e.trav); W.mode = 'gone'; W.goneAt = te + G.curInterval * CFG.chipRollLead + 0.05; W.goneSnd = false; G.gone.push(W);
+        log('event', 'wallet.empty', 'id=' + e.trav.id); break; }
+      case 'lose': G.loseTrav = e.trav; log('event', 'level.lose', 'прилавок полон'); break;
+      case 'win': log('event', 'field.cleared', 'deposited=' + st.deposited); break;
+    }
+  }
+}
+function tapColumn(c){
+  const st = G.st; if (!st || st.ended || G.screen !== 'game') return false;
+  const fronts = st.columns.map(col => col[0]), t = now(), res = deployColumn(st, c, t);
+  if (!res) return false;
+  if (res.rejected){ rejectTap(res, fronts[c], t); return false; }
+  G.hint = false;
+  for (const e of res.ev) if (e.kind === 'deploy'){ const W = G.wv.get(fronts[e.col]); if (W){ G.wv.delete(fronts[e.col]); W.src = e.trav; G.wv.set(e.trav, W); } }
+  onEvents(res.ev, t); syncWallets(t);
+  return true;
+}
+function tapSlot(i){
+  const st = G.st; if (!st || st.ended || G.screen !== 'game') return false;
+  const t = now(), trav = st.slots[i], res = relaunchSlot(st, i, t);
+  if (!res) return false;
+  if (res.rejected){ rejectTap(res, trav, t); return false; }
+  onEvents(res.ev, t); syncWallets(t);
+  return true;
+}
+function rejectTap(res, obj, t){
+  const st = G.st;
+  Sfx.reject(); buzz([8, 30, 8]);
+  for (const W of G.wv.values()) if (W.src === obj || (obj && obj.link && W.src.link === obj.link)) W.shakeAt = t;
+  toast(res.rejected === 'buried' ? 'Кошельки на резинке выходят вместе — второй ещё не первый' : 'На ленте уже ' + st.capacity + ' — подожди');
+  log('event', 'reject', res.rejected);
+}
+
+// ---------------------------------------------------------------------------
+// Монета: полёт от кошелька к столбику. Время полёта = клетки × chipSeg (как в игре): выпрыгнула из кошелька на лоток →
+// катится НА РЕБРЕ по прямой гекса → дугой заходит на верх столбика и там крутится, затихая (drawPiles).
+// ---------------------------------------------------------------------------
+function layerBaseY(vp, vl){ let y = 0; for (const l of vp.layers){ if (l === vl) return y; y += l.landed * CFG.coinH; } return y; }
+function pileHeight(vp){ let y = 0; for (const l of vp.layers) y += l.landed * CFG.coinH; return y; }
+function startCoin(c){
+  const W = c.W;
+  c.P0 = W ? [W.x, W.y + R3.pouchTop * W.sy, W.z] : [c.bx * 1.25, 1, c.bz * 1.25];
+  if (W){ W.emit = Math.max(0, W.emit - 1); W.spitAt = c.t0; }
+}
+const POSE = { x: 0, y: 0, z: 0, q: [0, 0, 0, 1], rolling: false, psi: 0, phi: 0 };
+function coinPose(c, t){
+  const T = c.t1 - c.t0, tau = Math.min(T, Math.max(0, t - c.t0)), R = CFG.coinR;
+  const Dx = c.vp.x, Dz = c.vp.z, Dy = layerBaseY(c.vp, c.vl) + c.vl.landed * CFG.coinH + CFG.coinH / 2;
+  let hx = Dx - c.bx, hz = Dz - c.bz; const len = Math.hypot(hx, hz) || 1; hx /= len; hz /= len;
+  const hop = Math.min(CFG.hopDist, len), rollLen = len - hop, Cx = Dx - hx * hop, Cz = Dz - hz * hop;
+  const dA = Math.min(CFG.popT, T * 0.4), dC = Math.min(CFG.hopT, T * 0.5), dB = Math.max(1e-4, T - dA - dC);
+  const sx = hz, sz = -hx;                                   // ось монеты на ребре — поперёк пути
+  let x, y, z, tilt, dist; POSE.rolling = false;
+  if (tau < dA){ const u = tau / dA;                          // из кошелька на лоток: вылетает почти плашмя, встаёт на ребро
+    x = mix(c.P0[0], c.bx, u); z = mix(c.P0[2], c.bz, u); y = mix(c.P0[1], R, u * u) + Math.sin(Math.PI * u) * CFG.popArc; tilt = mix(0.5, Math.PI / 2, easeOut(u)); dist = (u - 1) * 1.4;
+  } else if (tau < dA + dB){ const u = (tau - dA) / dB;       // катится на ребре
+    x = mix(c.bx, Cx, u); z = mix(c.bz, Cz, u); y = R; tilt = Math.PI / 2 + Math.sin(u * 9 + c.t0 * 7) * 0.07; dist = rollLen * u; POSE.rolling = rollLen > 0.2;
+  } else { const u = (tau - dA - dB) / dC;                    // заход на столбик: дуга, монета заваливается к посадке
+    x = mix(Cx, Dx, u); z = mix(Cz, Dz, u); const end = Dy + R * Math.sin(CFG.landTilt);
+    y = mix(R, end, u) + Math.sin(Math.PI * u) * (CFG.hopArc + Math.max(0, Dy - R) * 0.3); tilt = mix(Math.PI / 2, CFG.landTilt, easeIn(u)); dist = rollLen + hop * u;
+  }
+  const st = Math.sin(tilt);
+  POSE.x = x; POSE.y = y; POSE.z = z; POSE.phi = dist / R; POSE.psi = Math.atan2(sz, sx);
+  quatNS(st * sx, Math.cos(tilt), st * sz, POSE.phi, POSE.q);
+  return POSE;
+}
+function coinArrived(c, t){
+  const st = G.st, vp = c.vp, vl = c.vl;
+  if (!c.P0) startCoin(c);
+  coinPose(c, c.t1);
+  vl.landed++; vp.kick = t; vp.wob = { t0: t, l: vl, psi0: POSE.psi, phi: POSE.phi };
+  const n = vl.landed, tenth = n >= CFG.maxCenter && !vl.wrap;
+  Sfx.clink(vl.kind, n - 1, tenth ? 1.15 : 0.9); buzzCoin();
+  if (CFG.logCoins) log('event', 'coin.land', vp.k + ' metal=' + CFG.metals[vl.kind].id + ' n=' + n);
+  const topY = layerBaseY(vp, vl) + n * CFG.coinH;
+  G.fx.push({ type: 'glint', x: vp.x, y: topY + 0.1, z: vp.z, t0: t, dur: 0.16, size: 0.5, col: '#ffffff' });
+  if (c.layerCleared || c.cellCleared){                       // контракт ядра: клетка открывает луч, когда долетела добивающая монета
+    st.pending.delete(c.k);
+    if (c.cellCleared){ const ev = []; checkWin(st, ev); if (ev.length) onEvents(ev, t); }
+  }
+  if (tenth) startWrap(vp, vl, t);
+  else if (n === CFG.maxCenter - 1) log('fx.start', 'nine', vp.k);
+}
+// Десятая монета: хит-стоп → обёртка закручивается, концы сминаются → ролл приседает и улетает в сейф.
+function startWrap(vp, vl, t){
+  hitStop(CFG.hitStopMs);
+  const combo = (t - G.combo.at) < CFG.comboWindow ? G.combo.n + 1 : 1;
+  G.combo.n = combo; G.combo.at = t;
+  const gain = CFG.maxCenter * CFG.metals[vl.kind].value * combo;
+  vl.wrap = { vp, l: vl, t0: t, t1: t + CFG.wrapT, t2: t + CFG.wrapT + CFG.rollPrepT, combo, gain };
+  G.wraps.push(vl.wrap);
+  Sfx.rollChord(vl.kind, combo - 1); Sfx.paper(CFG.wrapT); buzz(CFG.vib.roll);
+  const y = layerBaseY(vp, vl) + CFG.maxCenter * CFG.coinH + 0.5;
+  G.fx.push({ type: 'ring', x: vp.x, y: y - 0.9, z: vp.z, t0: t, dur: 0.3, r0: 0.7, r1: 1.7, col: CFG.metals[vl.kind].coin });
+  G.fx.push({ type: 'text', x: vp.x, y: y + 0.4, z: vp.z, t0: t, dur: 0.8, txt: combo >= 2 ? '×' + combo : '+' + gain, size: combo >= 2 ? 0.8 : 0.6, col: combo >= 2 ? CFG.metals[0].coin : '#fff3da' });
+  for (let k = 0; k < Math.min(8, (combo - 1) * 3); k++){ const a = fxRnd() * TAU; G.fx.push({ type: 'spark', x: vp.x, y: y, z: vp.z, vx: Math.cos(a) * 90, vy: Math.sin(a) * 70 - 40, t0: t, dur: 0.4, size: 0.26, col: CFG.metals[vl.kind].coin }); }   // серия: чем длиннее, тем гуще искры
+  log('fx.start', 'wrap', vp.k + ' metal=' + CFG.metals[vl.kind].id + ' combo=' + combo);
+}
+function finishWrap(w, t){
+  const vp = w.vp, base = layerBaseY(vp, w.l), i = vp.layers.indexOf(w.l), lh = CFG.maxCenter * CFG.coinH;
+  if (i >= 0) vp.layers.splice(i, 1);
+  G.rolls.push({ x: vp.x, y: base + lh / 2, z: vp.z, kind: w.l.kind, t0: t, t1: t + CFG.rollFlyT, gain: w.gain, spin: fxRnd() < 0.5 ? 1 : -1 });
+  Sfx.whoosh(); vp.kick = t;
+  log('fx.end', 'wrap', vp.k); log('fx.start', 'roll.fly', vp.k);
+  if (vp.layers.length){
+    const nl = vp.layers[vp.layers.length - 1]; vp.flashAt = t; Sfx.ding(nl.kind);
+    log('event', 'layer.open', vp.k + ' metal=' + CFG.metals[nl.kind].id);
+  } else {
+    vp.emptyAt = t; Sfx.hole(); buzz(CFG.vib.hole);
+    for (let k = 0; k < 4; k++){ const a = fxRnd() * TAU; G.fx.push({ type: 'dust', x: vp.x + Math.cos(a) * 0.4, y: 0.15, z: vp.z + Math.sin(a) * 0.4, vx: Math.cos(a) * 1.6, vz: Math.sin(a) * 1.6, t0: t, dur: 0.42, size: 0.5 }); }
+    G.fx.push({ type: 'star', x: vp.x, y: 0.1, z: vp.z, t0: t + 0.06, dur: 0.5, size: 0.62, col: '#fff3da' });
+    log('fx.start', 'hole', vp.k);
+  }
+}
+function rollArrived(r, t){
+  G.score += r.gain; G.rollsDone++; G.safeKick = t; Sfx.safeThud(false); buzz(CFG.vib.safe);
+  const g = G.goalW;
+  for (let k = 0; k < 3; k++){ const a = 0.4 + fxRnd() * 2.3; G.fx.push({ type: 'spark', x: g[0], y: g[1], z: g[2], vx: Math.cos(a) * 70, vy: Math.sin(a) * 60, t0: t, dur: 0.32, size: 0.22, col: CFG.metals[r.kind].coin }); }
+  G.fx.push({ type: 'ring', x: g[0], y: g[1], z: g[2], t0: t, dur: 0.35, r0: 1.2, r1: 2.6, col: CFG.metals[r.kind].coin });
+  G.fx.push({ type: 'text', x: g[0] + 2.6, y: g[1], z: g[2], t0: t, dur: 0.6, txt: '+' + r.gain, size: 0.6, col: CFG.metals[0].coin });
+  log('fx.end', 'roll.fly', 'rolls=' + G.rollsDone + '/' + G.rollsTotal);
+}
+function addGlints(x, y, z, n, col){ const t = now(); for (let k = 0; k < n; k++) G.fx.push({ type: 'glint', x: x + (fxRnd() - 0.5) * 1.6, y: y + fxRnd() * 0.8, z: z + (fxRnd() - 0.5), t0: t + k * 0.05, dur: 0.3, size: 0.45, col: col || '#ffffff' }); }
+
+// ---------------------------------------------------------------------------
+// Шаг игры: посадки монет, заворачивания, роллы, тики диска, бот. Конец уровня — по состоянию в кадре
+// (урок lesson-ending-after-return-anim): победа начинается, когда ядро выиграло И последний ролл лёг в сейф.
+// ---------------------------------------------------------------------------
+function advance(t){
+  const st = G.st; if (!st) return;
+  for (let i = G.coins.length - 1; i >= 0; i--){ const c = G.coins[i]; if (t >= c.t1){ G.coins.splice(i, 1); coinArrived(c, t); } }
+  for (let i = G.wraps.length - 1; i >= 0; i--){ const w = G.wraps[i]; if (t >= w.t2){ G.wraps.splice(i, 1); finishWrap(w, t); } }
+  for (let i = G.rolls.length - 1; i >= 0; i--){ const r = G.rolls[i]; if (t >= r.t1){ G.rolls.splice(i, 1); rollArrived(r, t); } }
+  if (!st.ended){
+    const land = landTravelers(st, t); if (land.length) onEvents(land, t);
+    let guard = 0;
+    while (t >= G.nextTick && guard++ < 8 && !st.ended){
+      const te = G.nextTick;
+      if (G.auto && st.travelers.length < st.capacity) botMove();
+      const ev = step(st, te);
+      G.tickN++; G.lastTickT = te; G.curInterval = stepInterval(st); G.nextTick = te + G.curInterval;
+      for (const e of ev) if (e.kind === 'deposit') e.lead = true;
+      if (ev.length) onEvents(ev, te);
+    }
+    if (guard >= 8) G.nextTick = t + G.curInterval;
+    syncWallets(t);
+  }
+  if (!G.end){
+    if (st.ended === 'lose') startLose(t);
+    else if (st.ended === 'win' && !G.coins.length && !G.wraps.length && !G.rolls.length) startWin(t);
+  }
+  if (G.end) (G.end.kind === 'win' ? runWin : runLose)(t);
+}
+function botMove(){
+  const st = G.st, act = (G.auto === 'dumb' ? dumbAction : G.auto === 'random' ? randomAct : greedyAction)(st, G.botRng);
+  if (!act) return;
+  if (act.kind === 'column') tapColumn(act.i); else tapSlot(act.i);
+}
+
+// ---------------------------------------------------------------------------
+// Финал. Диск уже раскручен (очередь и прилавок пусты — ядро само даёт ×2). Последний ролл лёг → наезд на сейф,
+// дверца хлопает, диск замка крутится, барабан докручивает бонус, карточка победы — внизу.
+// ---------------------------------------------------------------------------
+const seqT = () => (realNow() - G.end.r0) / 1000 * G.speed;      // время сценария: реальные секунды (замедление часов на него не действует)
+function startWin(t){
+  G.end = { kind: 'win', r0: realNow(), step: 0, phys: 0, made: 0, rain: 0, clinkAt: 0, clinkN: 0 };
+  log('event', 'level.win', 'rolls=' + G.rollsDone); log('fx.start', 'finale');
+}
+// Монета фонтана или дождя: летит по баллистике (stepScatter), звенит на первом ударе о лоток.
+function winCoin(x, y, z, vx, vy, vz){
+  const kinds = [...G.kinds.values()], kind = kinds[Math.floor(fxRnd() * kinds.length)];
+  G.scat.push({ x, y, z, vx, vy, vz, tilt: fxRnd() * 3, tv: (fxRnd() - 0.5) * 26, psi: fxRnd() * TAU, pv: (fxRnd() - 0.5) * 10, kind, b: 0, rest: false, win: true, lift: G.scat.length * 0.004 });
+}
+function runWin(t){
+  const E = G.end, s = seqT(), T0 = CFG.winFocusT, g = G.goalW;
+  if (E.step === 0 && s >= T0){ E.step = 1; Sfx.doorSlam(); buzz(CFG.vib.slam); G.safeKick = t; log('event', 'safe.door'); log('fx.start', 'win.fountain');
+    for (let k = 0; k < 6; k++){ const a = fxRnd() * TAU; G.fx.push({ type: 'spark', x: g[0], y: g[1], z: g[2], vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, t0: t, dur: 0.45, size: 0.3, col: CFG.metals[0].coin }); } }
+  if (E.step >= 1){                                             // фонтан из сейфа: монеты бьют вверх и в стороны, падают на лоток
+    const want = Math.min(CFG.winFountain, Math.floor((s - T0) / CFG.winFountainT * CFG.winFountain));
+    while (E.made < want){ E.made++; const a = fxRnd() * TAU, sp = 2 + fxRnd() * 6.5; winCoin(g[0] + Math.cos(a) * 0.6, 1.2, g[2] + 0.8 + Math.sin(a) * 0.4, Math.cos(a) * sp, 9 + fxRnd() * 9, Math.sin(a) * sp * 0.8 + 1.5); }
+  }
+  if (E.step === 1 && s >= T0 + 0.15){ E.step = 2; Sfx.dial(14, 0.7); }
+  if (E.step >= 2) G.dial = TAU * 2.5 * easeOut(clamp01((s - T0 - 0.15) / 0.8));
+  if (E.step === 2 && s >= T0 + 1.0){ E.step = 3; Sfx.win(); buzz([20, 40, 20, 40, 60]); addGlints(g[0], g[1] + 0.5, g[2], 6, CFG.metals[0].coin); }
+  if (E.step === 3 && s >= T0 + 1.75){ E.step = 6;
+    const sc = Math.round(G.score); G.save.best[G.li] = Math.max(G.save.best[G.li] || 0, sc); G.save.coins = (G.save.coins || 0) + sc; G.save.level = Math.max(G.save.level, Math.min(G.li + 1, LEVELS.length - 1)); save();
+    log('fx.end', 'finale'); log('event', 'reward', 'coins=' + sc); goto('win'); E.countR0 = realNow(); E.tickAt = 0; }
+  if (E.step === 6){                                            // карточка: награда набегает, под ней сыплется дождь монет
+    const u = clamp01((realNow() - E.countR0) / 1000 * G.speed / CFG.winCountT), el = $('win-coins');
+    if (el) el.textContent = '+' + Math.round(G.score * easeOut(u));
+    if (u < 1 && s - E.tickAt > 0.055){ E.tickAt = s; Sfx.drumTick(u); buzzCoin(); }
+    if (u >= 1 && !E.counted){ E.counted = true; Sfx.rollChord(0, 4); log('fx.end', 'win.count'); }
+    const want = Math.min(CFG.winRain, Math.floor((s - T0 - 1.75) / 0.09));
+    while (E.rain < want){ E.rain++; winCoin((fxRnd() - 0.5) * 15, 13 + fxRnd() * 4, (fxRnd() - 0.3) * 12, (fxRnd() - 0.5) * 2, -2, (fxRnd() - 0.5) * 2); }
+  }
+  let n = 0; while (E.phys + 1 / 120 <= s && n++ < 40){ E.phys += 1 / 120; stepScatter(1 / 120, E); }
+  if (n >= 40) E.phys = s;
+}
+
+// ---------------------------------------------------------------------------
+// Проигрыш «на волоске»: шестому кошельку некуда лечь — он бьётся о прилавок, кошельки валятся, монеты рассыпаются,
+// последняя в замедлении катится к краю и крутится, затихая (монета Эйлера). Потом — «ещё одно место» на прилавке (заглушка).
+// ---------------------------------------------------------------------------
+function startLose(t){
+  const E = G.end = { kind: 'lose', r0: realNow(), step: 0, phys: 0, hero: null };
+  const W = G.wv.get(G.loseTrav);
+  if (W){ W.mode = 'lost'; E.off = W; E.from = [W.x, W.y, W.z]; }
+  Sfx.setSpin(0); Sfx.lose();
+  log('fx.start', 'lose.spill');
+}
+function runLose(t){
+  const E = G.end, s = seqT(), cz = CFG.slotZ;
+  if (E.off && s < 0.24){ const u = clamp01(s / 0.22), W = E.off; W.x = mix(E.from[0], 0.4, u); W.z = mix(E.from[2], cz - 1.7, u); W.y = Math.sin(Math.PI * u) * 1.4; }
+  if (E.step === 0 && s >= 0.22){
+    E.step = 1; setSlow(CFG.loseSlow); buzz(CFG.vib.lose);
+    const fallen = G.st.slots.map(tr => G.wv.get(tr)).filter(Boolean); if (E.off) fallen.push(E.off);
+    const kinds = []; let budget = CFG.loseScatterMax;
+    fallen.forEach((W, i) => {
+      const a = (W.x - 0.4) * 0.35 + (fxRnd() - 0.5) * 1.2 + (W === E.off ? Math.PI : 0);
+      W.topple = { s0: s + i * 0.03, ax: Math.cos(a - Math.PI / 2), az: Math.sin(a - Math.PI / 2), dx: Math.sin(a) * 0.5, dz: Math.cos(a) * 0.3 };
+      const n = Math.min(budget, Math.min(6, Math.max(2, shownCount(W)))); budget -= n;
+      for (let k = 0; k < n; k++){ const b = a + (fxRnd() - 0.5) * 1.9, sp = 3.5 + fxRnd() * 5;
+        G.scat.push({ x: W.x, y: 1.2, z: W.z, vx: Math.sin(b) * sp * 0.6, vy: 5 + fxRnd() * 6, vz: Math.cos(b) * sp * 0.5 + 1.0, tilt: fxRnd() * 3, tv: (fxRnd() - 0.5) * 22, psi: fxRnd() * TAU, pv: (fxRnd() - 0.5) * 9, kind: W.kind, b: 0, rest: false }); kinds.push(W.kind); }
+    });
+    E.heroKind = fallen.length ? fallen[fallen.length - 1].kind : 0;
+    Sfx.scatter(kinds.slice(0, 14));
+  }
+  if (E.step === 1 && s >= 0.6){ E.step = 2; E.hero = { s0: s }; log('fx.start', 'lose.lastcoin'); }
+  if (E.step === 2 && s >= 0.6 + CFG.loseRollT){ E.step = 3; Sfx.eulerSpin(E.heroKind, CFG.loseSpinT / G.speed); }
+  if (E.step === 3 && s >= 0.6 + CFG.loseRollT + CFG.loseSpinT){ E.step = 4; setSlow(1); log('fx.end', 'lose.lastcoin'); const h = heroPose(s); G.fx.push({ type: 'glint', x: h.x, y: 0.3, z: h.z, t0: now(), dur: 0.3, size: 0.7, col: '#ffffff' }); }
+  if (E.step === 4 && s >= 0.6 + CFG.loseRollT + CFG.loseSpinT + 0.25){ E.step = 5; log('fx.end', 'lose.spill'); goto('lose'); }
+  // рассыпанные монеты: баллистика с фиксированным шагом (§4), в замедлении
+  const target = Math.max(0, s - 0.22) * CFG.loseSlow * 1.4; let n = 0;
+  while (E.phys + 1 / 120 <= target && n++ < 40){ E.phys += 1 / 120; stepScatter(1 / 120); }
+  if (n >= 40) E.phys = target;
+}
+function stepScatter(dt, E){
+  const floor = CFG.coinH / 2;
+  for (const c of G.scat){
+    if (c.rest) continue;
+    c.vy -= 32 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; c.tilt += c.tv * dt; c.psi += c.pv * dt;
+    const low = floor + CFG.coinR * Math.abs(Math.sin(c.tilt)) * (c.b >= 2 ? 0.25 : 1);
+    if (c.y < low && c.vy < 0){
+      c.y = low; c.vy = -c.vy * 0.38; c.vx *= 0.62; c.vz *= 0.62; c.tv *= 0.55; c.b++;
+      if (c.win && c.b === 1 && E && E.phys - E.clinkAt > 0.045){ E.clinkAt = E.phys; Sfx.clink(c.kind, E.clinkN++ % 10, 0.42); buzzCoin(); }   // победные монеты звенят лесенкой
+      if (c.b >= 2){ const flat = Math.round(c.tilt / Math.PI) * Math.PI; c.tilt = flat + (c.tilt - flat) * 0.45; c.tv = 0; c.pv *= 1.6; }
+      if (c.b >= 4 || Math.abs(c.vy) < 0.9){ c.rest = true; c.tilt = Math.round(c.tilt / Math.PI) * Math.PI; c.y = floor + (c.lift || 0); }
+    }
+  }
+}
+// Последняя монета: сначала катится на ребре по дуге от прилавка к правому краю, потом крутится и ложится.
+const HERO = { x: 0, y: 0, z: 0, q: [0, 0, 0, 1] };
+function heroPose(s){
+  const E = G.end, R = CFG.coinR, cz = CFG.slotZ, P0 = [0.6, cz + 0.4], P1 = [3.6, cz + 2.4], P2 = [6.9, cz + 1.75];
+  const u = clamp01((s - E.hero.s0) / CFG.loseRollT), e = 1 - Math.pow(1 - u, 2.4), o = 1 - e;
+  let x = o * o * P0[0] + 2 * o * e * P1[0] + e * e * P2[0], z = o * o * P0[1] + 2 * o * e * P1[1] + e * e * P2[1];
+  let hx = 2 * o * (P1[0] - P0[0]) + 2 * e * (P2[0] - P1[0]), hz = 2 * o * (P1[1] - P0[1]) + 2 * e * (P2[1] - P1[1]); const l = Math.hypot(hx, hz) || 1; hx /= l; hz /= l;
+  const v = clamp01((s - E.hero.s0 - CFG.loseRollT) / CFG.loseSpinT);
+  if (v <= 0){ const tilt = Math.PI / 2 - e * 0.22; quatNS(Math.sin(tilt) * hz, Math.cos(tilt), -Math.sin(tilt) * hx, e * 9.5 / R, HERO.q); HERO.x = x; HERO.y = R * Math.sin(tilt) + CFG.coinH / 2 * Math.cos(tilt); HERO.z = z; }
+  else { const al = (Math.PI / 2 - 0.22) * Math.pow(1 - v, 1.7), psi = Math.atan2(-hx, hz) + TAU * (1.2 * v + 7.5 * Math.pow(v, 2.6)), rr = 0.3 * (1 - v);
+    quatNS(Math.sin(al) * Math.cos(psi), Math.cos(al), Math.sin(al) * Math.sin(psi), 9.5 / R, HERO.q);
+    HERO.x = x + Math.cos(psi) * rr; HERO.z = z + Math.sin(psi) * rr; HERO.y = R * Math.sin(al) + CFG.coinH / 2 * Math.cos(al); }
+  return HERO;
+}
+
+// ---------------------------------------------------------------------------
+// Кадр: подача предметов в сцену (assets/scene3d.js) и 2D-слой поверх (подписи, искры, барабан, виньетка)
+// ---------------------------------------------------------------------------
+const Q = [0, 0, 0, 1];
+function drawPiles(t){
+  const H = CFG.coinH, lh = CFG.maxCenter * H, pr = CFG.coinR * CFG.paperR, intro = t - G.introAt < 2.2;
+  for (const vp of G.vp.values()){
+    const ks = t - vp.kick, sag = ks < 0.7 ? 1 - CFG.sagAmt * spring(ks, CFG.sagFreq, CFG.sagDamp) : 1;
+    const top = vp.layers[vp.layers.length - 1]; let y = 0, total = 0;
+    const flash = clamp01(1 - (t - vp.flashAt) / CFG.revealFlashT);
+    for (const l of vp.layers){
+      const isTop = l === top, w = l.wrap;
+      if (!(w && t >= w.t1)) for (let i = 0; i < l.landed; i++, total++){
+        const h = hash01(vp.seed * 131 + total), last = i === l.landed - 1;
+        let glow = 0;
+        if (isTop && last && !w && l.landed === CFG.maxCenter - 1) glow = 0.62 + 0.38 * Math.sin(t * CFG.glowHz * TAU);
+        if (isTop && last && flash > 0) glow = Math.max(glow, flash * 0.9);
+        let cy = (y + (i + 0.5) * H) * sag; const wb = vp.wob;
+        if (intro){ const iu = (t - G.introAt - vp.delay - total * CFG.introStep) / CFG.introDropT; if (iu <= 0) continue; if (iu < 1) cy += (1 - iu) * (1 - iu) * 7; }   // каскад на старте: монеты ссыпаются сверху
+        if (last && wb && wb.l === l && t - wb.t0 < CFG.settleT){          // монета Эйлера: наклон гаснет, прецессия ускоряется
+          const s = (t - wb.t0) / CFG.settleT, al = CFG.landTilt * Math.pow(1 - s, 1.6), psi = wb.psi0 + CFG.settleTurns * TAU * Math.pow(s, 1.5);
+          quatNS(Math.sin(al) * Math.cos(psi), Math.cos(al), Math.sin(al) * Math.sin(psi), wb.phi, Q);
+          R3.coinQ(vp.x, cy + CFG.coinR * Math.sin(al), vp.z, Q, l.kind + (isTop ? 0.4 : 0), glow);
+        } else R3.coinFlat(vp.x + (h - 0.5) * 0.05, cy, vp.z + (hash01(vp.seed + total * 7) - 0.5) * 0.05, h * TAU, l.kind + (isTop && last && !w ? 0.4 : 0), glow, sag);   // верхняя монета — без знака: на ней число
+      }
+      if (w){                                                              // обёртка закручивается вокруг полосы
+        const u = clamp01((t - w.t0) / (w.t1 - w.t0)), pre = clamp01((t - w.t1) / (w.t2 - w.t1));
+        R3.paper(vp.x, y + lh / 2 - pre * 0.12, vp.z, null, pr * (1 + pre * 0.08), lh * CFG.paperH * (1 - pre * 0.13), mix(CFG.peekWrap, 1, easeInOut(clamp01(u / 0.72))), clamp01((u - 0.5) / 0.5), l.kind);
+      } else if (isTop && l.landed === CFG.maxCenter - 1){                   // 9/10: краешек обёртки выглядывает из-за столбика
+        R3.paper(vp.x, y + lh * CFG.peekH / 2, vp.z - 0.06, null, pr * 1.04, lh * CFG.peekH, CFG.peekWrap + 0.02 * Math.sin(t * 3.1 + vp.i), 0, l.kind);
+      }
+      y += l.landed * H;
+    }
+    if (y > 0) R3.shadow(vp.x, vp.z, CFG.coinR * (1.2 + y * 0.16), 0.55);
+    if (vp.emptyAt > 0){ const e = clamp01(1 - (t - vp.emptyAt - 0.05) / 0.5); R3.socketGlow(vp.i, t - vp.emptyAt > 0.05 ? e * 0.8 : 0); }
+  }
+}
+function drawWallets(t){
+  const draw = (W) => {
+    placeWallet(W, t);
+    const cnt = shownCount(W), sec = W.secret, empty = cnt <= 0 && W.mode !== 'queue';
+    const mt = W.mode === 'queue' ? CFG.queueScale : W.mode === 'slot' ? CFG.slotScale : CFG.ringScale;
+    W.ms = W.ms === undefined ? mt : W.ms + (mt - W.ms) * Math.min(1, G.dt * 12);
+    const base = (sec ? 0.96 : mix(CFG.walletMin, 1, clamp01((cnt - 1) / (CFG.walletFull - 1)))) * CFG.walletR * W.ms;
+    const fill = sec ? 1 : clamp01(cnt / W.n0);
+    let sxz = base * mix(0.9, 1, fill), sy = base * mix(0.62, 1, fill), rx = 0, rz = 0, y = W.y, x = W.x, z = W.z, flash = 0;
+    const sq = t - W.squashAt;                                          // тап: сжатие за 60 мс, потом пружина
+    if (sq >= 0 && sq < 0.6){ const k = sq < CFG.tapSquashT ? CFG.tapSquash * easeOut(sq / CFG.tapSquashT) : CFG.tapSquash * spring(sq - CFG.tapSquashT, 30, 9); sy *= 1 - k; sxz *= 1 + k * 0.6; }
+    if (W.plopDone && t - W.plopAt < 0.6 && t >= W.plopAt){ const k = 0.16 * spring(t - W.plopAt, 28, 8); sy *= 1 - k; sxz *= 1 + k * 0.6; }
+    const sp = t - W.spitAt; if (sp >= 0 && sp < 0.3){ const k = 0.06 * spring(sp, 40, 12); sy *= 1 + k; sxz *= 1 - k * 0.5; }
+    const sh = t - W.shakeAt; if (sh >= 0 && sh < 0.4) x += Math.sin(sh * 60) * 0.16 * (1 - sh / 0.4);
+    const rv = t - W.revealAt; if (rv >= 0 && rv < 0.5){ const k = 0.22 * spring(rv, 26, 7); sy *= 1 + k; sxz *= 1 + k; flash = Math.max(0, 0.5 - rv * 2); }
+    if (W.mode === 'gone'){                                             // пуст: сплющился и улетел с искрой
+      const g = t - W.goneAt;
+      if (g >= 0){
+        if (!W.goneSnd){ W.goneSnd = true; Sfx.walletGone(); G.fx.push({ type: 'spark', x, y: 0.8, z, vx: 0, vy: -60, t0: t, dur: 0.35, size: 0.3, col: '#fff3da' }); }
+        const f = clamp01(g / CFG.goneFlatT), u = clamp01((g - CFG.goneFlatT) / CFG.goneFlyT);
+        sy *= mix(1, 0.16, easeOut(f)); sxz *= mix(1, 1.25, easeOut(f)) * (1 - u); y += easeIn(u) * 5; z -= easeIn(u) * 2; rz = u * 2.4; W.dead = u >= 1;
+      }
+    } else if (empty) sy *= 0.5;
+    if (W.topple){ const s = seqT() - W.topple.s0, u = clamp01(s / 0.42), k = (u * u) * 1.5 * (1 + 0.08 * spring(s - 0.42, 22, 7)); rx = W.topple.ax * k; rz = W.topple.az * k; x += W.topple.dx * u; z += W.topple.dz * u; }
+    if (W.mode === 'queue' && t - G.introAt < 1.3){ const iu = clamp01((t - G.introAt - 0.2 - W.col * 0.06 - W.row * 0.07) / 0.28), b = iu <= 0 ? 0.001 : 1 + 0.25 * spring(iu * 0.28, 24, 9) * (iu < 1 ? 1 : 0) - (1 - iu) * (1 - iu); sxz *= Math.max(0.001, b); sy *= Math.max(0.001, b); }   // кошельки выскакивают по очереди
+    W.sxz = sxz; W.sy = sy; W.dx = x; W.dy = y; W.dz = z; W.cnt = cnt;
+    if (W.dead) return;
+    R3.wallet(x, y, z, sxz, sy, rx, rz, sec ? -1 : W.kind, flash);
+    if (!sec && cnt > 0 && !W.topple) R3.coinFlat(x, y + R3.pouchTop * sy, z, 0.6, W.kind, 0, 1, 0.44 * sxz);
+    R3.shadow(x, z, sxz * 1.25, 0.5 * clamp01(1 - y / 4));
+  };
+  for (const W of G.wv.values()) draw(W);
+  for (let i = G.gone.length - 1; i >= 0; i--){ draw(G.gone[i]); if (G.gone[i].dead) G.gone.splice(i, 1); }
+}
+function drawFlying(t){
+  let rolling = 0;
+  for (const c of G.coins){
+    if (t < c.t0) continue;
+    if (!c.P0) startCoin(c);
+    const p = coinPose(c, t);
+    R3.coinQ(p.x, p.y, p.z, p.q, c.kind, 0); R3.shadow(p.x, p.z, 0.6, 0.32);
+    c.sx = p.x; c.sy = p.y; c.sz = p.z; c.rolling = p.rolling; if (p.rolling) rolling++;
+  }
+  Sfx.setRoll(Math.min(1, rolling / 3));
+  const sx = G.goalW[0], sy = G.goalW[1], sz = G.goalW[2], lh = CFG.maxCenter * CFG.coinH;
+  for (const r of G.rolls){                                              // ролл: подпрыгнул и дугой, кувырком — в сейф
+    const u = clamp01((t - r.t0) / (r.t1 - r.t0)), e = u * u * (3 - 2 * u), a = r.spin * u * CFG.rollTurns * TAU;
+    const x = mix(r.x, sx, e), z = mix(r.z, sz, e), y = mix(r.y, sy, u) + Math.sin(Math.PI * u) * CFG.rollArc, k = 1 - 0.5 * easeIn(u);
+    Q[0] = Math.sin(a / 2); Q[1] = 0; Q[2] = 0; Q[3] = Math.cos(a / 2);
+    R3.paper(x, y, z, Q, CFG.coinR * CFG.paperR * k, lh * CFG.paperH * k, 1, 1, r.kind);
+    if (u < 0.8) R3.shadow(x, z, 0.9, 0.3 * (1 - u));
+  }
+  for (const c of G.scat){ quatNS(Math.sin(c.tilt) * Math.cos(c.psi), Math.cos(c.tilt), Math.sin(c.tilt) * Math.sin(c.psi), c.psi, Q); R3.coinQ(c.x, c.y, c.z, Q, c.kind, 0); R3.shadow(c.x, c.z, 0.7, 0.3); }
+  if (G.end && G.end.hero){ const h = heroPose(seqT()); R3.coinQ(h.x, h.y, h.z, h.q, G.end.heroKind, 0.25); R3.shadow(h.x, h.z, 0.8, 0.4); }
+}
+let lastReal = 0, PAL = null;
+function draw(t){
+  const r = realNow(), dt = Math.min(0.1, Math.max(0, (r - lastReal) / 1000)); lastReal = r;
+  const st = G.st; if (!st || !R3.ready) return;
+  G.dt = dt;
+  const gp = goalPose(), gw = R3.unproject(gp.x, gp.y, 2.4); G.goalW = [gw[0], 2.4, gw[1]];     // куда летят роллы: под значок сейфа
+  R3.begin();
+  drawPiles(t); drawWallets(t); drawFlying(t);
+  // настроение: разгон ленты, напряжение у прилавка
+  const loop = !st.ended && endgameLoop(st) && st.travelers.length > 0;
+  G.spin += ((loop ? 1 : 0) - G.spin) * Math.min(1, dt * (loop ? 2.2 : 5));
+  Sfx.setSpin(G.spin * (0.55 + 0.45 * clamp01(st.deposited / Math.max(1, st.needed))));
+  const full = st.slots.length, tense = st.ended ? 0 : full >= CFG.maxSlots ? 2 : full === CFG.maxSlots - 1 ? 1 : 0;
+  G.tension += (tense - G.tension) * Math.min(1, dt * 6);
+  const pulse = 0.5 + 0.5 * Math.sin(r / 1000 * TAU * 1.6);
+  for (let i = 0; i < CFG.maxSlots; i++) R3.setSlotRing(i, tense === 2 ? R3.colDanger : R3.colAmber, tense === 2 ? 0.45 + 0.55 * pulse : tense === 1 && i === full ? 0.35 + 0.65 * pulse : 0);
+  if (tense === 2 && t - G.tickSndAt >= CFG.tickEvery){ G.tickSndAt = t; Sfx.tick(); }
+  R3.setTrack((G.tickN + clamp01((t - G.lastTickT) / G.curInterval)) / L.n * 3, 0.2 + 0.8 * G.spin);
+  R3.setVeil(0.62 * gp.f);
+  R3.render();
+  const u = G.rollsTotal ? G.rollsDone / G.rollsTotal : 0; G.barU += (u - G.barU) * Math.min(1, dt * 8);
+  drawOverlay(t, r);
+}
+
+// --- 2D-слой: подписи и искры поверх сцены. Каждая функция рисования названа и описана (§11). ---
+const fxc = $('fx'), ctx = fxc.getContext('2d');
+let VW = 400, VH = 700, DPR = 1;
+// Подпись с обводкой: число монет на кошельке, «+50», «×2».
+function drawLabel(c, txt, x, y, size, fill, stroke){
+  c.font = '900 ' + size.toFixed(1) + 'px Nunito, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  if (stroke){ c.lineWidth = Math.max(2, size * 0.26); c.strokeStyle = stroke; c.lineJoin = 'round'; c.strokeText(txt, x, y); }
+  c.fillStyle = fill; c.fillText(txt, x, y);
+}
+// Число на верхней монете столбика — как номинал, отчеканенный на самой монете: тон в тон металлу (тёмный оттенок, светлая кромка сверху-слева),
+// сплюснуто под наклон камеры. Читается, но внимание остаётся на монетах, а не на цифрах.
+function drawNumeral(c, txt, x, y, size, kind){
+  c.save(); c.translate(x, y); c.scale(1, 0.8);
+  c.font = '900 ' + size.toFixed(1) + 'px Nunito, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = PAL.numHi[kind]; c.fillText(txt, -0.7, -0.9); c.fillStyle = PAL.numLo[kind]; c.fillText(txt, 0.7, 1.0);
+  c.fillStyle = PAL.numFill[kind]; c.fillText(txt, 0, 0); c.restore();
+}
+// Четырёхлучевой блик: размер size px, яркость a.
+function drawGlint(c, x, y, size, a, col){
+  c.save(); c.translate(x, y); c.globalAlpha = a; c.fillStyle = col; c.beginPath();
+  for (let i = 0; i < 8; i++){ const r = i % 2 ? size * 0.18 : size, an = i * Math.PI / 4; c[i ? 'lineTo' : 'moveTo'](Math.cos(an) * r, Math.sin(an) * r); }
+  c.closePath(); c.fill(); c.restore();
+}
+// Пятиконечная звёздочка в пустой лунке.
+function drawStar(c, x, y, size, a, col, rot){
+  c.save(); c.translate(x, y); c.rotate(rot); c.globalAlpha = a; c.fillStyle = col; c.beginPath();
+  for (let i = 0; i < 10; i++){ const r = i % 2 ? size * 0.45 : size, an = -Math.PI / 2 + i * Math.PI / 5; c[i ? 'lineTo' : 'moveTo'](Math.cos(an) * r, Math.sin(an) * r); }
+  c.closePath(); c.fill(); c.restore();
+}
+// Цель уровня — сейф на верхней панели: значок (assets/ui/safe.png), под ним полоска и счёт роллов. Ролл прилетел — значок подпрыгивает.
+// В финале сейф выезжает в центр экрана, диск замка (assets/ui/dial.png) крутится.
+const IMG = {};
+function goalPose(){
+  const f = G.end && G.end.kind === 'win' ? easeInOut(clamp01(seqT() / CFG.winFocusT)) : 0;
+  return { x: VW / 2, y: mix(CFG.safePx / 2 + 26, VH * 0.4, f), s: CFG.safePx * mix(1, 2.8, f), f };
+}
+function drawGoal(c, t){
+  const g = goalPose(), ks = t - G.safeKick, s = g.s * (1 + (ks < 0.6 ? CFG.safeSquash * spring(ks, 30, 8) : 0));
+  if (g.f > 0.02){                                          // лучи за сейфом: медленно вращаются, пока идёт финал
+    const R = g.s * 1.9, rot = performance.now() / 1000 * 0.5; c.save(); c.translate(g.x, g.y); c.rotate(rot);
+    const gr = c.createRadialGradient(0, 0, g.s * 0.3, 0, 0, R); gr.addColorStop(0, `rgba(255,214,90,${0.5 * g.f})`); gr.addColorStop(1, 'rgba(255,214,90,0)'); c.fillStyle = gr;
+    for (let i = 0; i < 10; i++){ const a = i / 10 * TAU; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, a, a + TAU / 20); c.closePath(); c.fill(); }
+    c.restore();
+  }
+  if (IMG.safe && IMG.safe.naturalWidth){
+    c.drawImage(IMG.safe, g.x - s / 2, g.y - s / 2, s, s);
+    const d = CFG.safeDial, dr = d.r * s; c.save(); c.translate(g.x + (d.x - 0.5) * s, g.y + (d.y - 0.5) * s); c.rotate(G.dial); c.drawImage(IMG.dial, -dr, -dr, dr * 2, dr * 2); c.restore();
+  }
+  if (g.f < 0.5){
+    c.globalAlpha = 1 - g.f * 2; const w = 104, x0 = g.x - w / 2, y0 = g.y + g.s / 2 + 7;
+    c.fillStyle = PAL.pill; c.beginPath(); c.roundRect(x0, y0, w, 18, 9); c.fill();
+    if (G.barU > 0.005){ c.fillStyle = PAL.accent; c.beginPath(); c.roundRect(x0 + 2.5, y0 + 2.5, Math.max(13, (w - 5) * G.barU), 13, 6.5); c.fill(); }
+    drawLabel(c, G.rollsDone + ' / ' + G.rollsTotal, g.x, y0 + 9.5, 12.5, '#fff', 'rgba(20,22,50,.85)');
+    c.globalAlpha = 1;
+  }
+}
+// Вместимость ленты «2/5» у левого края — как в Hexa Glide (зелёный плюс — покупка места, заглушка).
+function drawCapacity(c){
+  const st = G.st, p = R3.project(-CFG.trackAp + 0.2, 0, CFG.trackAp * 0.66), x = Math.max(36, p[0]), y = p[1], n = st.travelers.length, full = n >= st.capacity;
+  c.fillStyle = PAL.pill; c.beginPath(); c.roundRect(x - 30, y - 14, 58, 28, 10); c.fill(); c.lineWidth = 2; c.strokeStyle = full ? PAL.danger : 'rgba(255,255,255,.16)'; c.stroke();
+  drawLabel(c, n + '/' + st.capacity, x - 3, y + 1, 15, full ? '#ff97a1' : '#fff');
+  c.fillStyle = PAL.ok; c.beginPath(); c.arc(x + 27, y + 11, 9, 0, TAU); c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); drawLabel(c, '+', x + 27, y + 11.5, 15, '#fff');
+}
+// Резинка между кошельками связки: линия от края до края с лёгким провисом.
+function drawBand(c, a, b, k){
+  const pa = R3.project(a.dx, a.dy + 0.8 * a.sy, a.dz), pb = R3.project(b.dx, b.dy + 0.8 * b.sy, b.dz), dx = pb[0] - pa[0], dy = pb[1] - pa[1], l = Math.hypot(dx, dy) || 1;
+  const ra = a.sxz * k * 0.9, rb = b.sxz * k * 0.9; if (l < ra + rb) return;
+  const x0 = pa[0] + dx / l * ra, y0 = pa[1] + dy / l * ra, x1 = pb[0] - dx / l * rb, y1 = pb[1] - dy / l * rb;
+  c.lineCap = 'round';
+  for (const [w, col] of [[7, 'rgba(9,10,34,.55)'], [4, PAL.band]]){ c.lineWidth = w; c.strokeStyle = col; c.beginPath(); c.moveTo(x0, y0); c.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + 5, x1, y1); c.stroke(); }
+}
+function drawOverlay(t, r){
+  const c = ctx, k = R3.pxPerUnit(), st = G.st;
+  c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, VW, VH);
+  if (G.tension > 0.02){                                                 // тёплая виньетка: янтарь при 4/5, красная при 5/5
+    const g = c.createRadialGradient(VW / 2, VH * 0.55, VH * 0.28, VW / 2, VH * 0.55, VH * 0.72), a = Math.min(1, G.tension) * 0.2 + Math.max(0, G.tension - 1) * 0.16;
+    g.addColorStop(0, 'rgba(255,150,40,0)'); g.addColorStop(1, G.tension > 1.2 ? `rgba(255,70,60,${a})` : `rgba(255,160,50,${a})`);
+    c.fillStyle = g; c.fillRect(0, 0, VW, VH);
+  }
+  // числа на столбиках — сколько монет в верхней полосе (как цифры на стопках Hexa Glide)
+  for (const vp of G.vp.values()){ const top = vp.layers[vp.layers.length - 1]; if (!top || top.wrap || t - G.introAt < vp.delay + 0.45) continue;
+    const q = R3.project(vp.x, pileHeight(vp) + 0.02, vp.z); drawNumeral(c, String(top.landed), q[0], q[1], k * CFG.numeralSize, top.kind); }
+  if (!st.ended) drawCapacity(c);
+  // резинки связок
+  const byLink = new Map();
+  for (const W of G.wv.values()) if (W.src.link > 0 && W.mode !== 'gone'){ if (!byLink.has(W.src.link)) byLink.set(W.src.link, []); byLink.get(W.src.link).push(W); }
+  for (const g of byLink.values()) for (let i = 1; i < g.length; i++) drawBand(c, g[i - 1], g[i], k);
+  // следы-блики катящихся монет
+  for (const m of G.coins) if (m.rolling){
+    const a = R3.project(m.sx, m.sy, m.sz), dx = m.sx - m.bx, dz = m.sz - m.bz, l = Math.hypot(dx, dz) || 1, b = R3.project(m.sx - dx / l * Math.min(1.5, l), m.sy, m.sz - dz / l * Math.min(1.5, l));
+    const g = c.createLinearGradient(a[0], a[1], b[0], b[1]); g.addColorStop(0, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.strokeStyle = g; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(a[0], a[1] + k * 0.5); c.lineTo(b[0], b[1] + k * 0.5); c.stroke();
+  }
+  // подписи кошельков
+  const pulse = 1 + 0.16 * Math.sin(r / 1000 * TAU * 2.4);
+  for (const W of G.wv.values()){
+    if (W.topple || W.mode === 'gone') continue;
+    const p = R3.project(W.dx, W.dy + R3.pouchMid * W.sy, W.dz); let size = Math.max(13, k * 0.9 * W.sxz);
+    if (G.tension > 1.5 && W.mode === 'trav' && W.cnt > 0) size *= pulse;
+    if (W.secret) drawLabel(c, '?', p[0], p[1], size * 1.05, PAL.ink, 'rgba(9,10,34,.6)');
+    else if (W.cnt > 0) drawLabel(c, String(W.cnt), p[0], p[1], size, '#ffffff', PAL.labelEdge[W.kind]);
+  }
+  // эффекты
+  for (let i = G.fx.length - 1; i >= 0; i--){
+    const f = G.fx[i], u = (t - f.t0) / f.dur; if (u < 0) continue; if (u >= 1){ G.fx.splice(i, 1); continue; }
+    const p = R3.project(f.x, f.y, f.z);
+    if (f.type === 'glint') drawGlint(c, p[0], p[1], f.size * k * Math.sin(Math.PI * u) * 1.2, 1 - u * u, f.col);
+    else if (f.type === 'spark'){ drawGlint(c, p[0] + f.vx * u * f.dur * 1.2, p[1] + f.vy * u * f.dur * 1.2 + 90 * u * u * f.dur, f.size * k * (1 - u), 1 - u, f.col); }
+    else if (f.type === 'ring'){ c.globalAlpha = (1 - u) * 0.8; c.strokeStyle = f.col; c.lineWidth = 3 * (1 - u) + 1; c.beginPath(); const rr = mix(f.r0, f.r1, easeOut(u)) * k; c.ellipse(p[0], p[1], rr, rr * R3.SP(), 0, 0, TAU); c.stroke(); c.globalAlpha = 1; }
+    else if (f.type === 'dust'){ const q = R3.project(f.x + f.vx * easeOut(u) * f.dur, f.y + u * 0.5, f.z + f.vz * easeOut(u) * f.dur); c.globalAlpha = (1 - u) * 0.34; c.fillStyle = PAL.dust; c.beginPath(); c.arc(q[0], q[1], f.size * k * (0.5 + u * 0.8), 0, TAU); c.fill(); c.globalAlpha = 1; }
+    else if (f.type === 'star') drawStar(c, p[0], p[1] - k * 0.5 * easeOut(u), f.size * k * (0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, u * 1.4))), 1 - u * u, f.col, u * 1.2);
+    else if (f.type === 'text'){ c.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3; const pop = 1 + 0.35 * spring(u * f.dur, 22, 9); drawLabel(c, f.txt, p[0], p[1] - k * 0.9 * easeOut(u), f.size * k * pop, f.col, 'rgba(9,10,34,.7)'); c.globalAlpha = 1; }
+  }
+  drawGoal(c, t);
+  if (G.hint && !st.ended){                                             // первый уровень: кольцо-подсказка на первых кошельках
+    const u = (r / 1000 * 1.1) % 1;
+    for (let i = 0; i < st.columns.length; i++){ if (!st.columns[i].length) continue; const q = L.queue[i][0], p = R3.project(q[0], 0.5, q[1]);
+      c.globalAlpha = 1 - u; c.strokeStyle = PAL.accent; c.lineWidth = 3; c.beginPath(); c.ellipse(p[0], p[1], k * (1.7 + u * 0.8), k * (1.7 + u * 0.8) * 0.86, 0, 0, TAU); c.stroke(); c.globalAlpha = 1; }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ввод: Pointer Events, порог тап/драг, pointercancel = pointerup (§3)
+// ---------------------------------------------------------------------------
+const gameEl = $('game');
+let down = null;
+function pickTap(px, py){
+  const st = G.st, k = R3.pxPerUnit(), rad = Math.max(CFG.tapMinPx, k * 1.45); let best = null, bd = rad;
+  for (const W of G.wv.values()){
+    if (W.mode !== 'queue' && W.mode !== 'slot') continue;
+    const p = R3.project(W.dx, W.dy + 0.7 * W.sy, W.dz), d = Math.hypot(p[0] - px, p[1] - py);
+    if (d < bd){ bd = d; best = W; }
+  }
+  return best;
+}
+gameEl.addEventListener('pointerdown', (e) => { Sfx.init(); const r = gameEl.getBoundingClientRect(); down = { x: e.clientX - r.left, y: e.clientY - r.top, id: e.pointerId }; try { gameEl.setPointerCapture(e.pointerId); } catch (err) {} });
+function onUp(e){
+  if (!down || e.pointerId !== down.id) return;
+  const r = gameEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, moved = Math.hypot(x - down.x, y - down.y) > CFG.tapSlop;
+  down = null;
+  if (moved || e.type === 'pointercancel' || G.screen !== 'game' || !G.st) return;
+  const W = pickTap(x, y); if (!W) return;
+  log('input', 'tap', W.mode === 'queue' ? 'col=' + W.col + ' row=' + W.row : 'slot=' + W.slot);
+  if (W.mode === 'queue') tapColumn(W.col); else tapSlot(W.slot);
+}
+gameEl.addEventListener('pointerup', onUp); gameEl.addEventListener('pointercancel', onUp);
+document.addEventListener('keydown', (e) => {                    // дубли на клавиатуру для отладки (§3)
+  if (e.key >= '1' && e.key <= '5'){ Sfx.init(); tapColumn(+e.key - 1); }
+  else if ('67890'.includes(e.key)){ Sfx.init(); tapSlot('67890'.indexOf(e.key)); }
+  else if (e.key === 'r') startLevel(G.li);
+  else if (e.key === 'm') goto('menu');
+});
+$('btn-reset').onclick = () => { Sfx.init(); log('input', 'button', 'reset'); startLevel(G.li); };
+$('btn-menu').onclick = () => { Sfx.init(); log('input', 'button', 'menu'); goto('menu'); };
+
+// --- размер: resize + orientationchange + периодический пересчёт (§2); DPR сам понижается, если кадр не держится ---
+let dprCap = 2, fitKey = '';
+function fit(){
+  const r = gameEl.getBoundingClientRect(); if (!r.width || !r.height) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap), key = r.width + 'x' + r.height + '@' + dpr; if (key === fitKey) return; fitKey = key;
+  DPR = dpr; VW = r.width; VH = r.height; fxc.width = Math.round(VW * DPR); fxc.height = Math.round(VH * DPR);
+  R3.resize(VW, VH, DPR); if (G.screen === 'lose') placeRevive();
+}
+let fitTimer = 0;
+const refit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 140); };
+window.addEventListener('resize', refit); window.addEventListener('orientationchange', refit);
+setInterval(fit, 800);
+document.addEventListener('visibilitychange', () => { G.paused = document.hidden; reclock(); if (document.hidden){ Sfx.setRoll(0); Sfx.setSpin(0); } log('event', G.paused ? 'pause' : 'resume'); });
+
+// --- цикл: rAF + сторож setInterval; безопасно, потому что время абсолютное (§4) ---
+const perf = { dt: [], cpu: [], last: 0, slow: 0 };
+let lastFrame = 0;
+function tick(){
+  const p0 = performance.now(), t = now();
+  if (G.st && (G.screen === 'game' || G.screen === 'win' || G.screen === 'lose')){ advance(t); draw(t); }
+  if (toastUntil && p0 > toastUntil){ $('toast').classList.add('hide'); toastUntil = 0; }
+  perf.cpu.push(performance.now() - p0); if (perf.cpu.length > 240) perf.cpu.shift();
+}
+function frame(){
+  const p = performance.now();
+  if (lastFrame){ const d = p - lastFrame; perf.dt.push(d); if (perf.dt.length > 240) perf.dt.shift();
+    if (G.screen === 'game' && d < 200){ perf.slow = d > 21 ? perf.slow + 1 : Math.max(0, perf.slow - 2);
+      if (perf.slow > 90 && dprCap > 1.25){ dprCap = Math.max(1.25, dprCap - 0.25); perf.slow = 0; fit(); log('event', 'dpr.down', dprCap); } } }
+  lastFrame = p;
+  if (!G.paused) tick();
+  requestAnimationFrame(frame);
+}
+setInterval(() => { if (performance.now() - lastFrame > 120 && !G.paused) tick(); }, 40);
+
+// --- дебаг-хук (§6): состояние, любой экран, прогон времени, автоигра, замер кадра ---
+window.MONETNYY_SORTER = {
+  G, CFG, LEVELS, R3, Sfx,
+  state(){
+    const st = G.st; if (!st) return { screen: G.screen };
+    return { screen: G.screen, level: G.li + 1, name: G.def.n, ended: st.ended, piles: st.center.size, deposited: st.deposited, needed: st.needed,
+             queue: st.columns.map(c => c.length), ring: st.travelers.length, slots: st.slots.length, coinsFlying: G.coins.length, wraps: G.wraps.length, rolls: G.rolls.length,
+             score: Math.round(G.score), combo: G.combo.n, tension: +G.tension.toFixed(2), spin: +G.spin.toFixed(2), end: G.end ? G.end.kind + ':' + G.end.step : null, t: +now().toFixed(2) };
+  },
+  play(n){ startLevel(Math.max(1, Math.min(LEVELS.length, n || 1)) - 1); return this.state(); },
+  tap(col){ return tapColumn(col); },
+  slot(i){ return tapSlot(i); },
+  goto(screen){ goto(screen); return G.screen; },
+  solve(){ return G.def ? queuePlayable(G.def) : null; },
+  auto(mode, seed){ G.auto = mode === false || mode === 0 ? null : (mode === 'dumb' || mode === 'random' ? mode : 'greedy'); if (seed !== undefined) G.botRng = mulberry32(seed); return G.auto; },   // true — бот игры, 'random' — случайный, 'dumb' — транжира (проигрыш)
+  drive(sec, draw3d){                              // ручной прогон времени кадрами по 1/60 с: rAF заморожен в скрытой вкладке
+    const n = Math.round(sec * 60);
+    for (let i = 0; i < n; i++){ Clock.off += 1000 / 60; const t = now(); if (G.st){ advance(t); if (draw3d !== false || i === n - 1) draw(t); } }
+    return this.state();
+  },
+  speed(x){ G.speed = x || 1; reclock(); return G.speed; },
+  look(x, y, z, half){ if (x === undefined) R3.setView(0); else R3.look(x, y, z, half || 5); if (G.st) draw(now()); return true; },   // крупный план (без аргументов — обратно)
+  unlockAll(on){ setUnlockAll(on === undefined ? true : on); if (G.screen === 'menu') goto('menu'); return G.save.unlockAll; },
+  reset(){ try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); },
+  perf(){                                          // замер кадра: интервалы rAF и время своего кода за последние 240 кадров
+    const s = perf.dt.slice().sort((a, b) => a - b), c = perf.cpu.slice().sort((a, b) => a - b), avg = s.reduce((a, b) => a + b, 0) / Math.max(1, s.length);
+    return { frames: s.length, fps: +(1000 / avg).toFixed(1), avgMs: +avg.toFixed(2), p95Ms: +(s[Math.floor(s.length * 0.95)] || 0).toFixed(2), maxMs: +(s[s.length - 1] || 0).toFixed(2),
+             over20: s.filter(x => x > 20).length, cpuAvgMs: +(c.reduce((a, b) => a + b, 0) / Math.max(1, c.length)).toFixed(2), cpuP95Ms: +(c[Math.floor(c.length * 0.95)] || 0).toFixed(2), dpr: DPR, scene: R3.stats() };
+  },
+  bench(frames){                                   // стоимость кадра без ожидания rAF: n кадров подряд, мс на кадр (свой код + отправка в GPU)
+    const n = frames || 120, p0 = performance.now(); for (let i = 0; i < n; i++){ Clock.off += 1000 / 60; const t = now(); advance(t); draw(t); } return +((performance.now() - p0) / n).toFixed(3);
+  },
+};
+
+// --- старт ---
+(function boot(){
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const shade = (hex, k) => { const h = hex.replace('#', ''), f = (i) => Math.min(255, Math.round(parseInt(h.slice(i, i + 2), 16) * k)); return `rgb(${f(0)},${f(2)},${f(4)})`; };
+  PAL = { ink: css('--ink'), muted: css('--muted'), accent: css('--accent'), pill: css('--pill'), danger: css('--danger'), ok: css('--ok'), dust: '#e3e6ff', band: '#ff8a5c',
+          numFill: CFG.metals.map(m => shade(m.coin, 0.5)), numHi: CFG.metals.map(m => shade(m.coin, 1.35)), numLo: CFG.metals.map(m => shade(m.coin, 0.32)),
+          labelEdge: CFG.metals.map(m => { const h = m.pouch.replace('#', ''); const d = (i) => Math.round(parseInt(h.slice(i, i + 2), 16) * 0.42); return `rgb(${d(0)},${d(2)},${d(4)})`; }) };
+  for (const n of ['safe', 'dial']){ IMG[n] = new Image(); IMG[n].src = 'assets/ui/' + n + '.png'; }
+  R3.init($('gl')); fit(); hud();
+  R3.useModels().then((list) => { log('event', 'models', list.join(',') || 'нет — процедурные заглушки'); if (G.st) R3.warmUp(); });
+  try { if (document.fonts && document.fonts.load) document.fonts.load('900 16px Nunito'); } catch (e) {}
+  openHash(location.hash.slice(1));
+  requestAnimationFrame(frame);
+  log('event', 'boot', 'levels=' + LEVELS.length);
+})();
+</script>
+</body>
+</html>
